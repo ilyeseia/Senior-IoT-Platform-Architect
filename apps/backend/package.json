@@ -6,7 +6,7 @@
     "build": "nest build",
     "start": "node dist/main.js",
     "start:dev": "nest start --watch",
-    "test": "echo \"(no backend tests yet — Phase 3 has none to test beyond boot)\"",
+    "test": "vitest run",
     "lint": "echo \"(no lint configured yet)\""
   },
   "dependencies": {
@@ -15,12 +15,15 @@
     "@nestjs/config": "^3.2.3",
     "@nestjs/core": "^10.4.4",
     "@nestjs/platform-express": "^10.4.4",
+    "mqtt": "^5.10.1",
     "reflect-metadata": "^0.2.2",
     "rxjs": "^7.8.1",
     "zod": "^3.23.8"
   },
   "devDependencies": {
     "@nestjs/cli": "^10.4.5",
-    "typescript": "^5.5.4"
+    "aedes": "^0.51.3",
+    "typescript": "^5.5.4",
+    "vitest": "^2.0.5"
   }
 }

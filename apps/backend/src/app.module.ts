@@ -3,6 +3,7 @@ import { ConfigModule } from "@nestjs/config";
 import { validateEnv } from "./config/env.validation";
 import { HealthModule } from "./health/health.module";
 import { EspClawModule } from "./esp-claw/esp-claw.module";
+import { MqttModule } from "./mqtt/mqtt.module";
 
 @Module({
   imports: [
@@ -12,6 +13,7 @@ import { EspClawModule } from "./esp-claw/esp-claw.module";
     }),
     HealthModule,
     EspClawModule,
+    MqttModule,
   ],
 })
 export class AppModule {}
