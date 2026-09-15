@@ -342,3 +342,22 @@ Only asking what a sound engineering default can't resolve on its own:
 5. **Realistic near-term device count** (not the eventual "millions" aspiration) — a handful of prototypes, or tens, over the next 1–2 months? This only affects whether MVP's EMQX runs single-node (fine into the thousands) — I'd default to single-node unless you tell me otherwise, just confirming before I write it into the Compose file.
 
 Once these are answered, Phase 2 (Repository Structure) is next — still no implementation code until that's laid out and confirmed.
+
+---
+
+## K. Confirmed Decisions (post-review)
+
+Answers received; recorded here so later phases build on a fixed foundation rather than re-litigating them.
+
+1. **Broker topology — confirmed (a):** No self-hosted EMQX. The platform is *another MQTT client* of the existing CloudAMQP broker devices already use. Docker Compose drops the broker service entirely; the backend just needs CloudAMQP's host/port/credentials as config. ACL enforcement (§G) is whatever CloudAMQP's plan offers — re-check its ACL/multi-tenant-topic capabilities before V1's per-tenant isolation hardening; if CloudAMQP's tier doesn't support per-device ACLs, that becomes a named V1 gap, not silently assumed solved.
+2. **Network — confirmed, with one assumption pending your correction:** deployed on a host joined to your existing Tailscale tailnet, reachable at a `*.ts.net` hostname with a Tailscale-issued HTTPS cert (`tailscale cert`) — no public domain, no self-signed cert. **If this isn't what you meant by "- ب", say so before Phase 2's Docker/Nginx config locks it in.**
+3. **Config authority — confirmed, and upgraded by decision #2:** the platform becomes the primary way to change device settings. Because platform and devices now share a tailnet, and ESP-Claw devices can already run in **`tailscale-gateway` VPN mode** (built and tested this session), the platform can reach each device's real, existing `/api/config` (GET/POST) directly over the encrypted tailnet mesh — **no new ESP-Claw capability needed for config-push at MVP.** This pulls config-authority forward from V1 into MVP scope (see revised §H below). Requirement this adds: every managed device must be provisioned with `vpn_mode` set to `tailscale-gateway` (or on-device WireGuard) so its LAN becomes tailnet-routable — call this out explicitly in the Provisioning step (§E.1). MQTT remains authoritative for anything device-initiated (presence, command/response, future telemetry/events) and for OTA triggering; the tailnet-reachable local HTTP API is specifically for platform-initiated configuration writes.
+4. **AI agent secrets — confirmed push-only.** `agents`/`device_credentials` schema (§D) and the vault (§G) are locked to that model: platform never calls anything that reads a device's current provider key back.
+5. **Near-term scale — confirmed low (prototypes → tens over 1–2 months).** Combined with decision #1 (no self-hosted broker), this removes broker-sizing from MVP planning entirely — whatever CloudAMQP tier is already active is sufficient.
+
+### Revised MVP (§H amendment)
+
+With config-authority achievable immediately (decision #3), add to the MVP list in §H:
+9. **Device settings page** — read current config via `GET /api/config` (over the tailnet) and write changes via `POST /api/config`, for the fields ESP-Claw already exposes (Wi-Fi, MQTT, VPN, search provider, timezone, capability groups). The backend must **never store or forward the raw response of a `GET /api/config` call** beyond what's needed to render the form (per §0's plaintext-secrets finding) — secret-shaped fields (`*_password`, `*_key`, `wg_private_key`, etc.) are write-only from the platform's UI, exactly like the on-device Web UI already treats them.
+
+This also means Provisioning (§E.1) gains one required step: set `vpn_mode=tailscale-gateway` (or configure the on-device WireGuard tunnel) as part of initial local setup, so the device is reachable over the tailnet before it's considered "fully onboarded." A device that's on MQTT but not yet tailnet-routable is a valid intermediate state (`status = provisioning`, telemetry/commands work, settings page does not) — worth its own visible status value rather than conflating it with a broken device.
