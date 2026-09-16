@@ -628,17 +628,33 @@ pnpm -r test    → 40 passed (protocol 22, backend 18 — 6 local-api-client, 5
                   authored in esp-claw-2 this session)
 ```
 
-**⚠️ Not verified live yet, same reason as Phase 6's migration 0003**: the tailnet host carrying
-the dev Postgres (100.108.45.123) is still unreachable (`tailscaled` stopped locally, and I don't
-have permission to start the Windows service — needs an administrator). Migration `0004` (the
-telemetry hypertable) has **not** been run against a real Postgres, and the poller has not been
-observed dispatching against a real device. Do this once the tailnet is back:
+**✅ Live-verified in a follow-up pass**: the tailnet came back (`tailscale status` shows
+`100.108.45.123` online), TCP 5432 reachable, so the previously-blocked verification was
+completed for real:
+
+```
+pnpm exec typeorm-ts-node-commonjs migration:run -d src/database/data-source.ts
+  → AddDeviceCapabilities1700000000003 executed
+  → CreateTelemetryHypertable1700000000004 executed (create_hypertable('telemetry', 'recorded_at'))
+
+node dist/main.js  (DATABASE_URL → postgres://esp_claw:esp_claw_dev_only@100.108.45.123:5432/esp_claw_platform)
+  → TypeOrmModule/DevicesModule/CommandsModule/TelemetryModule all initialize cleanly
+  → "Telemetry poller started (every 60000ms)" logged, no errors with zero devices registered
+  → GET /health          → 200 {"status":"ok",...}
+  → GET /devices         → 200 [] (correctly empty — no MQTT_URL configured in this pass, so no
+                                    device has ever reported presence into *this* Postgres)
+  → GET /devices/x/telemetry → 200 [] (correct shape, no crash on an unknown device)
+```
+
+**What this proves**: migrations `0003`/`0004` apply cleanly to a real (non-aedes, non-local)
+Postgres+TimescaleDB instance, the app boots and serves traffic against it, and the telemetry
+poller starts without error. **What's still not verified**, and can't be from this environment:
+the poller actually recording a sample from a real device — that needs a real `MQTT_URL`
+(CloudAMQP credentials) plus at least one online device, neither of which this pass has access to.
+Do this once both are available:
 
 ```bash
-export DATABASE_URL=postgres://esp_claw:esp_claw_dev_only@<pg-host>:5432/esp_claw_platform
-pnpm --filter @esp-claw/backend exec typeorm-ts-node-commonjs migration:run -d src/database/data-source.ts
-# expect: CreateTelemetryHypertable1700000000004 applied → telemetry hypertable exists
-
+# in apps/backend/.env, add: MQTT_URL=mqtts://<user>:<pass>@<your-instance>.rmq.cloudamqp.com:8883
 pnpm --filter @esp-claw/backend start
 # wait one TELEMETRY_POLL_INTERVAL_MS cycle (default 60s) with at least one online device, then:
 curl "localhost:3000/devices/<device_id>/telemetry"
