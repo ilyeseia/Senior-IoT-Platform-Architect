@@ -1,9 +1,11 @@
 import { Injectable, Logger, OnModuleDestroy, OnModuleInit } from "@nestjs/common";
 import { ConfigService } from "@nestjs/config";
+import { EventEmitter2 } from "@nestjs/event-emitter";
 import mqtt, { MqttClient } from "mqtt";
 import { randomUUID } from "crypto";
 import { CommandEnvelope, parseResponseEnvelope, parseStatusEnvelope, ResponseEnvelope } from "@esp-claw/protocol";
 import { TopicService } from "../esp-claw/topic.service";
+import { DEVICE_STATUS_EVENT, DeviceStatusEvent } from "./mqtt.events";
 import type { Env } from "../config/env.validation";
 
 export interface DevicePresence {
@@ -52,6 +54,7 @@ export class MqttService implements OnModuleInit, OnModuleDestroy {
   constructor(
     private readonly config: ConfigService<Env, true>,
     private readonly topics: TopicService,
+    private readonly events: EventEmitter2,
   ) {
     this.mqttUrl = this.config.get("MQTT_URL", { infer: true });
   }
@@ -189,13 +192,13 @@ export class MqttService implements OnModuleInit, OnModuleDestroy {
     }
 
     if (parsed.leaf === "status") {
-      this.handleStatus(parsed.deviceId, json);
+      this.handleStatus(parsed.deviceId, parsed.baseTopic, json);
     } else if (parsed.leaf === "response") {
       this.handleResponse(json);
     }
   }
 
-  private handleStatus(deviceId: string, json: unknown): void {
+  private handleStatus(deviceId: string, baseTopic: string, json: unknown): void {
     try {
       const status = parseStatusEnvelope(json);
       this.presence.set(deviceId, {
@@ -203,6 +206,10 @@ export class MqttService implements OnModuleInit, OnModuleDestroy {
         online: status.online,
         lastSeenAt: new Date().toISOString(),
       });
+      // Decoupled from DevicesService on purpose (PHASE5-DATABASE.md) — this
+      // module doesn't know or care who's listening.
+      const event: DeviceStatusEvent = { deviceId, baseTopic, online: status.online };
+      this.events.emit(DEVICE_STATUS_EVENT, event);
     } catch {
       this.logger.debug(`Ignoring malformed status envelope for device ${deviceId}`);
     }

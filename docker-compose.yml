@@ -1,0 +1,19 @@
+# Grows phase by phase — Phase 5 only needs Postgres+TimescaleDB for
+# development/testing. Phase 8 adds redis; Phase 13 finalizes backend/
+# frontend/nginx into a full deployable stack. Not doing all of that now
+# would be building ahead of the phase that needs it.
+services:
+  postgres:
+    image: timescale/timescaledb:latest-pg16
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: esp_claw
+      POSTGRES_PASSWORD: esp_claw_dev_only
+      POSTGRES_DB: esp_claw_platform
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+
+volumes:
+  postgres_data:

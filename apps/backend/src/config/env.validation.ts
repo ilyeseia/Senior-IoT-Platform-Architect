@@ -1,12 +1,16 @@
 /**
- * Env validation for Phase 3 (Backend skeleton). Only PORT/NODE_ENV are
- * actually required to boot right now. MQTT_URL/DATABASE_URL/REDIS_URL/
- * JWT_SECRET are validated for *shape* (so a typo'd .env fails fast once
- * they're introduced) but are optional at this phase — nothing in Phase 3
- * connects to them yet. Phase 4 (MQTT), Phase 5 (Database) and Phase 10
- * (Security) each promote their own variable to required as that
- * integration actually lands, instead of the whole app refusing to boot
- * before those phases exist.
+ * Env validation, updated as each phase lands (see the doc-comment on each
+ * field below for exactly why it is or isn't required yet):
+ *  - Phase 3: PORT/NODE_ENV required to boot.
+ *  - Phase 4: MQTT_URL stays OPTIONAL on purpose — it's a real, external,
+ *    user-owned broker credential (CloudAMQP) that this codebase never
+ *    holds; requiring it would block anyone from running/testing the rest
+ *    of the app without real credentials. MqttService degrades gracefully.
+ *  - Phase 5: DATABASE_URL is now REQUIRED — unlike MQTT, a local dev
+ *    Postgres is something anyone can stand up themselves with
+ *    `docker compose up -d postgres` using the fixed dev-only credentials in
+ *    .env.example, so there's no reason to degrade gracefully here.
+ *  - REDIS_URL / JWT_SECRET remain optional until Phase 8 / Phase 10.
  */
 import { z } from "zod";
 
@@ -17,7 +21,8 @@ export const envSchema = z.object({
   MQTT_URL: z.string().url().optional(),
   MQTT_BASE_TOPIC_PREFIX: z.string().min(1).default("espclaw"),
 
-  DATABASE_URL: z.string().url().optional(),
+  DATABASE_URL: z.string().url(),
+
   REDIS_URL: z.string().url().optional(),
   JWT_SECRET: z.string().min(1).optional(),
 });
