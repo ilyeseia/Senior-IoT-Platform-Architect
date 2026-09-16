@@ -11,6 +11,11 @@
  *    `docker compose up -d postgres` using the fixed dev-only credentials in
  *    .env.example, so there's no reason to degrade gracefully here.
  *  - REDIS_URL / JWT_SECRET remain optional until Phase 8 / Phase 10.
+ *  - TELEMETRY_POLL_INTERVAL_MS (Architecture Evolution §13, Option B):
+ *    optional, defaults to 60000ms in TelemetryPollerService itself — not
+ *    required to boot, same reasoning as MQTT_URL: a sensible built-in
+ *    default exists, so nobody is blocked from running the app without
+ *    tuning this first.
  */
 import { z } from "zod";
 
@@ -25,6 +30,8 @@ export const envSchema = z.object({
 
   REDIS_URL: z.string().url().optional(),
   JWT_SECRET: z.string().min(1).optional(),
+
+  TELEMETRY_POLL_INTERVAL_MS: z.coerce.number().int().positive().optional(),
 });
 
 export type Env = z.infer<typeof envSchema>;

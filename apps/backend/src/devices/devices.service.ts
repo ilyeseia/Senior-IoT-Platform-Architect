@@ -1,18 +1,36 @@
-import { Injectable, Logger } from "@nestjs/common";
+import { BadRequestException, Injectable, Logger, NotFoundException } from "@nestjs/common";
 import { InjectRepository } from "@nestjs/typeorm";
 import { OnEvent } from "@nestjs/event-emitter";
-import { Repository } from "typeorm";
+import { In, Not, Repository } from "typeorm";
+import { capabilityGroupIds } from "@esp-claw/protocol";
 import { Device } from "./device.entity";
+import { DeviceCapability } from "./device-capability.entity";
+import { LocalApiClient } from "../esp-claw/local-api-client";
 import type { DeviceStatusEvent } from "../mqtt/mqtt.events";
 
 @Injectable()
 export class DevicesService {
   private readonly logger = new Logger(DevicesService.name);
 
-  constructor(@InjectRepository(Device) private readonly repo: Repository<Device>) {}
+  constructor(
+    @InjectRepository(Device) private readonly repo: Repository<Device>,
+    @InjectRepository(DeviceCapability) private readonly capRepo: Repository<DeviceCapability>,
+    private readonly localApi: LocalApiClient,
+  ) {}
 
   findAll(): Promise<Device[]> {
     return this.repo.find({ order: { firstSeenAt: "ASC" } });
+  }
+
+  /** Devices currently marked online — used by TelemetryPollerService (Data Plane §13) to avoid dispatching commands to devices known to be unreachable. */
+  findOnline(): Promise<Device[]> {
+    return this.repo.find({ where: { online: true }, order: { id: "ASC" } });
+  }
+
+  /** Whether a device has reported the given capability group (Phase 6). Used to skip polling a capability a device doesn't have, instead of generating a failed command every cycle. */
+  async hasCapabilityGroup(deviceId: string, groupId: string): Promise<boolean> {
+    const count = await this.capRepo.count({ where: { deviceId, groupId } });
+    return count > 0;
   }
 
   findOne(id: string): Promise<Device | null> {
@@ -51,5 +69,55 @@ export class DevicesService {
   @OnEvent("device.status")
   async handleDeviceStatus(event: DeviceStatusEvent): Promise<void> {
     await this.upsertPresence(event.deviceId, event.baseTopic, event.online);
+  }
+
+  listCapabilities(id: string): Promise<DeviceCapability[]> {
+    return this.capRepo.find({ where: { deviceId: id }, order: { groupId: "ASC" } });
+  }
+
+  /**
+   * Phase 6 introspection (PHASE1-ANALYSIS.md §K): pull the device's real
+   * capability catalog from its local `GET /api/capabilities` over the tailnet
+   * and persist the groups. `baseUrl` (a device tailnet host/URL) overrides and
+   * updates the stored `localApiBaseUrl`. Existing rows are kept (preserving
+   * firstSeenAt), newly-absent groups are removed. Ongoing traffic stays on
+   * MQTT — this is a one-shot discovery pull, never a live data path.
+   */
+  async refreshCapabilities(id: string, baseUrl?: string): Promise<DeviceCapability[]> {
+    const device = await this.repo.findOne({ where: { id } });
+    if (!device) {
+      throw new NotFoundException(`Device ${id} not found`);
+    }
+    const url = (baseUrl ?? device.localApiBaseUrl ?? "").trim();
+    if (!url) {
+      throw new BadRequestException(
+        "No local API base URL known for this device — pass { baseUrl } or set it first",
+      );
+    }
+
+    const catalog = await this.localApi.fetchCapabilities(url);
+    const groupIds = capabilityGroupIds(catalog);
+    this.logger.log(`Device ${id}: discovered ${groupIds.length} capability group(s) via ${url}`);
+
+    await this.capRepo.manager.transaction(async (tx) => {
+      if (catalog.items.length > 0) {
+        await tx.upsert(
+          DeviceCapability,
+          catalog.items.map((g) => ({
+            deviceId: id,
+            groupId: g.group_id,
+            displayName: g.display_name,
+            defaultLlmVisible: g.default_llm_visible,
+          })),
+          ["deviceId", "groupId"],
+        );
+        await tx.delete(DeviceCapability, { deviceId: id, groupId: Not(In(groupIds)) });
+      } else {
+        await tx.delete(DeviceCapability, { deviceId: id });
+      }
+      await tx.update(Device, { id }, { localApiBaseUrl: url, capabilitiesRefreshedAt: new Date() });
+    });
+
+    return this.listCapabilities(id);
   }
 }
