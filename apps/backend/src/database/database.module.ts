@@ -2,6 +2,7 @@ import { Module } from "@nestjs/common";
 import { ConfigService } from "@nestjs/config";
 import { TypeOrmModule } from "@nestjs/typeorm";
 import { Device } from "../devices/device.entity";
+import { DeviceCapability } from "../devices/device-capability.entity";
 import { Command } from "../commands/command.entity";
 import { CommandResult } from "../commands/command-result.entity";
 import type { Env } from "../config/env.validation";
@@ -13,7 +14,7 @@ import type { Env } from "../config/env.validation";
       useFactory: (config: ConfigService<Env, true>) => ({
         type: "postgres" as const,
         url: config.get("DATABASE_URL", { infer: true }),
-        entities: [Device, Command, CommandResult],
+        entities: [Device, DeviceCapability, Command, CommandResult],
         // Migrations only, never auto-sync — schema changes are explicit,
         // reviewable, and reversible (item 33's reliability spirit applies
         // to schema changes too, not just runtime retries).

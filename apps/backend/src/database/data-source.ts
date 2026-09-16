@@ -7,13 +7,14 @@
 import "dotenv/config";
 import { DataSource } from "typeorm";
 import { Device } from "../devices/device.entity";
+import { DeviceCapability } from "../devices/device-capability.entity";
 import { Command } from "../commands/command.entity";
 import { CommandResult } from "../commands/command-result.entity";
 
 export const AppDataSource = new DataSource({
   type: "postgres",
   url: process.env.DATABASE_URL,
-  entities: [Device, Command, CommandResult],
+  entities: [Device, DeviceCapability, Command, CommandResult],
   migrations: [__dirname + "/migrations/*.{js,ts}"],
   synchronize: false,
 });

@@ -30,6 +30,18 @@ export class Device {
   @Column({ type: "timestamptz", nullable: true })
   lastSeenAt!: Date | null;
 
+  /**
+   * The device's local ESP-Claw HTTP base URL (its tailnet IP/host, e.g.
+   * "http://100.108.45.150") used for one-shot introspection over the tailnet
+   * (Phase 6). Nullable: unknown until an operator provides it or a refresh is
+   * run with an explicit baseUrl. Never used for ongoing traffic — that's MQTT.
+   */
+  @Column({ type: "varchar", length: 255, nullable: true })
+  localApiBaseUrl!: string | null;
+
+  @Column({ type: "timestamptz", nullable: true })
+  capabilitiesRefreshedAt!: Date | null;
+
   @CreateDateColumn({ type: "timestamptz" })
   firstSeenAt!: Date;
 

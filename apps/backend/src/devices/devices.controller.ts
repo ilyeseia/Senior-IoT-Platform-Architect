@@ -1,4 +1,4 @@
-import { Controller, Get, NotFoundException, Param } from "@nestjs/common";
+import { Body, Controller, Get, NotFoundException, Param, Post } from "@nestjs/common";
 import { DevicesService } from "./devices.service";
 
 /**
@@ -24,5 +24,22 @@ export class DevicesController {
       throw new NotFoundException(`Device ${id} not found`);
     }
     return device;
+  }
+
+  /** Capability groups last discovered from this device's local /api/capabilities. */
+  @Get(":id/capabilities")
+  listCapabilities(@Param("id") id: string) {
+    return this.devices.listCapabilities(id);
+  }
+
+  /**
+   * Pull the device's capability catalog from its local HTTP API over the
+   * tailnet and persist it (Phase 6). Body `{ baseUrl }` is the device's tailnet
+   * host/URL (e.g. "http://100.108.45.150"); if omitted, the device's stored
+   * localApiBaseUrl is used. Introspection only — never touches /api/config.
+   */
+  @Post(":id/capabilities/refresh")
+  refreshCapabilities(@Param("id") id: string, @Body() body?: { baseUrl?: string }) {
+    return this.devices.refreshCapabilities(id, body?.baseUrl);
   }
 }
