@@ -10,6 +10,7 @@ import { DevicesModule } from "./devices/devices.module";
 import { CommandsModule } from "./commands/commands.module";
 import { TelemetryModule } from "./telemetry/telemetry.module";
 import { IdentityModule } from "./identity/identity.module";
+import { TwinModule } from "./twin/twin.module";
 
 @Module({
   imports: [
@@ -25,6 +26,7 @@ import { IdentityModule } from "./identity/identity.module";
     MqttModule,
     DevicesModule,
     CommandsModule,
+    TwinModule,
     TelemetryModule,
   ],
 })

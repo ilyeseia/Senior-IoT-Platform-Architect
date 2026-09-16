@@ -2,7 +2,8 @@ import { Injectable, Logger, OnModuleDestroy, OnModuleInit } from "@nestjs/commo
 import { ConfigService } from "@nestjs/config";
 import { CommandsService } from "../commands/commands.service";
 import { DevicesService } from "../devices/devices.service";
-import { TelemetryService } from "./telemetry.service";
+import { TelemetryService, extractSamples } from "./telemetry.service";
+import { TwinService } from "../twin/twin.service";
 import type { Env } from "../config/env.validation";
 
 const DEFAULT_POLL_INTERVAL_MS = 60_000;
@@ -44,6 +45,7 @@ export class TelemetryPollerService implements OnModuleInit, OnModuleDestroy {
     private readonly devices: DevicesService,
     private readonly commands: CommandsService,
     private readonly telemetry: TelemetryService,
+    private readonly twin: TwinService,
   ) {}
 
   onModuleInit(): void {
@@ -93,6 +95,10 @@ export class TelemetryPollerService implements OnModuleInit, OnModuleDestroy {
         return;
       }
       const count = await this.telemetry.recordCapabilityResult(deviceId, capability, result.result);
+      // Digital Twin (ARCHITECTURE-EVOLUTION.md §18): the same extracted
+      // scalar fields become the twin's `reported` state — one extraction
+      // source, two consumers (time-series + latest-value snapshot).
+      await this.twin.mergeReported(deviceId, extractSamples(result.result));
       this.logger.debug(`${deviceId}: ${capability} -> ${count} sample(s)`);
     } catch (err) {
       this.logger.warn(`${deviceId}: ${capability} poll failed: ${(err as Error).message}`);

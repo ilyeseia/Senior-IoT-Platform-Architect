@@ -12,11 +12,12 @@ import { Command } from "../commands/command.entity";
 import { CommandResult } from "../commands/command-result.entity";
 import { TelemetrySample } from "../telemetry/telemetry-sample.entity";
 import { User } from "../identity/user.entity";
+import { DeviceShadow } from "../twin/device-shadow.entity";
 
 export const AppDataSource = new DataSource({
   type: "postgres",
   url: process.env.DATABASE_URL,
-  entities: [Device, DeviceCapability, Command, CommandResult, TelemetrySample, User],
+  entities: [Device, DeviceCapability, Command, CommandResult, TelemetrySample, User, DeviceShadow],
   migrations: [__dirname + "/migrations/*.{js,ts}"],
   synchronize: false,
 });

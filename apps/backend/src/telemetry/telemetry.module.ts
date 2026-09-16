@@ -6,9 +6,10 @@ import { TelemetryController } from "./telemetry.controller";
 import { TelemetryPollerService } from "./telemetry-poller.service";
 import { DevicesModule } from "../devices/devices.module";
 import { CommandsModule } from "../commands/commands.module";
+import { TwinModule } from "../twin/twin.module";
 
 @Module({
-  imports: [TypeOrmModule.forFeature([TelemetrySample]), DevicesModule, CommandsModule],
+  imports: [TypeOrmModule.forFeature([TelemetrySample]), DevicesModule, CommandsModule, TwinModule],
   controllers: [TelemetryController],
   providers: [TelemetryService, TelemetryPollerService],
   exports: [TelemetryService],
