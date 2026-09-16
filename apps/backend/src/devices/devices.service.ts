@@ -22,6 +22,17 @@ export class DevicesService {
     return this.repo.find({ order: { firstSeenAt: "ASC" } });
   }
 
+  /** Devices currently marked online — used by TelemetryPollerService (Data Plane §13) to avoid dispatching commands to devices known to be unreachable. */
+  findOnline(): Promise<Device[]> {
+    return this.repo.find({ where: { online: true }, order: { id: "ASC" } });
+  }
+
+  /** Whether a device has reported the given capability group (Phase 6). Used to skip polling a capability a device doesn't have, instead of generating a failed command every cycle. */
+  async hasCapabilityGroup(deviceId: string, groupId: string): Promise<boolean> {
+    const count = await this.capRepo.count({ where: { deviceId, groupId } });
+    return count > 0;
+  }
+
   findOne(id: string): Promise<Device | null> {
     return this.repo.findOne({ where: { id } });
   }

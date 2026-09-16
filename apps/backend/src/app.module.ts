@@ -8,6 +8,7 @@ import { MqttModule } from "./mqtt/mqtt.module";
 import { DatabaseModule } from "./database/database.module";
 import { DevicesModule } from "./devices/devices.module";
 import { CommandsModule } from "./commands/commands.module";
+import { TelemetryModule } from "./telemetry/telemetry.module";
 
 @Module({
   imports: [
@@ -22,6 +23,7 @@ import { CommandsModule } from "./commands/commands.module";
     MqttModule,
     DevicesModule,
     CommandsModule,
+    TelemetryModule,
   ],
 })
 export class AppModule {}

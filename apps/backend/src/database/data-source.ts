@@ -10,11 +10,12 @@ import { Device } from "../devices/device.entity";
 import { DeviceCapability } from "../devices/device-capability.entity";
 import { Command } from "../commands/command.entity";
 import { CommandResult } from "../commands/command-result.entity";
+import { TelemetrySample } from "../telemetry/telemetry-sample.entity";
 
 export const AppDataSource = new DataSource({
   type: "postgres",
   url: process.env.DATABASE_URL,
-  entities: [Device, DeviceCapability, Command, CommandResult],
+  entities: [Device, DeviceCapability, Command, CommandResult, TelemetrySample],
   migrations: [__dirname + "/migrations/*.{js,ts}"],
   synchronize: false,
 });
