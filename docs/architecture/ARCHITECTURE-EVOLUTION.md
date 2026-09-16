@@ -383,16 +383,19 @@ conflate them:
    `mcp_call_tool`/`mcp_list_tools` via the existing command/response envelope, exactly like any
    other capability call. This lets the platform ask a device to act as an MCP *client* against
    some third-party MCP server it can reach.
-2. **Inbound aggregation (genuinely new, needs a design decision — see §Questions):** presenting
-   *devices'* own MCP *servers* (`cap_mcp_server`, LAN+mDNS-local) as one aggregated endpoint for a
-   central AI agent. mDNS does not route across a tailnet the way a naive "central gateway"
-   diagram implies. Two honest paths: (a) devices announce their MCP server's reachable URL over
-   the existing `status` topic (small, additive firmware change — a new field, not a new leaf),
-   and the platform proxies each one directly since they're already tailnet-reachable in this
-   deployment; or (b) a per-site Edge Gateway (§15) that *is* on the same LAN reaches the mDNS
-   services locally and re-exposes them upward. Recommend (a) first — smaller, fits the current
-   single-tailnet deployment, no new deployable — with (b) as the answer once multi-site/non-tailnet
-   fleets exist.
+2. **Inbound aggregation (blocked on a scope decision, not just a design decision — see the
+   firmware-work addendum's §B):** a later pass found `cap_mcp_server` is never actually started in
+   `edge_agent` (only in the unrelated `mcp_server_point` example app) — so "devices' own MCP
+   servers" don't exist on real deployed hardware today, and presenting *devices'* own MCP
+   *servers* (LAN+mDNS-local, if they existed) as one aggregated endpoint for a central AI agent is
+   not "genuinely new work to design," it's gated on first deciding whether `edge_agent` should run
+   an MCP server at all. mDNS does not route across a tailnet the way a naive "central gateway"
+   diagram implies, regardless. Two honest paths *if* that scope question is answered yes: (a)
+   devices announce their MCP server's reachable URL over the existing `status` topic (small,
+   additive firmware change — a new field, not a new leaf), and the platform proxies each one
+   directly since they're already tailnet-reachable in this deployment; or (b) a per-site Edge
+   Gateway (§15) that *is* on the same LAN reaches the mDNS services locally and re-exposes them
+   upward. (a) would still be the smaller option once/if scoped in.
 
 ### 20. Event Architecture — envelope now, NATS later, with explicit trigger criteria
 
@@ -597,12 +600,15 @@ resolve.
 2. **Telemetry via Option B** (poll existing capabilities, zero firmware changes) — confirmed.
    **Implemented this pass** — see §13-addendum below.
 3. **`cap_platform` firmware extension** (HMAC-signed short-lived command tokens for
-   `RESTRICTED`/`ROOT_AGENT_ONLY` capabilities) — in scope. **Design proposed below, pending
-   confirmation before touching `esp-claw-2` firmware** — new device-facing trust mechanism,
-   reviewed as a design first given this exact subsystem's real auth-bypass history earlier this
-   session.
-4. **MCP server URL announced on the `status` topic** — in scope. **Design proposed below**,
-   small enough to implement alongside #3 once confirmed.
+   `RESTRICTED`/`ROOT_AGENT_ONLY` capabilities) — confirmed, **implemented and live-verified
+   on real hardware** (`ecda3b4ff7d4`) in a follow-up pass. See the updated §A below — the shipped
+   design differs from the original proposal in two deliberate, documented ways.
+4. **MCP server URL announced on the `status` topic** — **not implemented**. A follow-up pass
+   discovered that `cap_mcp_server` is never actually started in the `edge_agent` application (it's
+   only wired up in a separate example app, `application/mcp_server_point`) — announcing an
+   `mcp_url` would describe a feature the real deployed firmware doesn't run. This is a scope
+   decision (add a real MCP server to `edge_agent`?), not a firmware bug to quietly fix — see the
+   updated §B below.
 
 ### §13-addendum — Telemetry (Option B), implemented
 
@@ -662,45 +668,72 @@ curl "localhost:3000/devices/<device_id>/telemetry"
 # discovered capabilities include
 ```
 
-### Firmware design proposals (esp-claw-2) — pending confirmation before implementation
+### Firmware work (esp-claw-2)
 
-**A. `cap_platform` — signed command tokens for restricted capabilities**
+**A. `cap_platform` — signed command tokens for restricted capabilities — IMPLEMENTED, LIVE-VERIFIED**
 
-Goal: let the platform trigger a `RESTRICTED`/`ROOT_AGENT_ONLY` capability (e.g. `ota_update`,
-`mqtt_configure`) deterministically over MQTT, without weakening `ROOT_AGENT_ONLY`'s existing
-protection against the conversational/LLM path or against arbitrary MQTT senders.
+Lets the platform trigger a `RESTRICTED`/`ROOT_AGENT_ONLY` capability (e.g. `ota_update`,
+`mqtt_configure`, `vpn_connect`) deterministically over MQTT, without weakening `ROOT_AGENT_ONLY`'s
+existing protection against the conversational/LLM path or against arbitrary MQTT senders. Shipped
+in `esp-claw-2` commit `bb9df36`, new Kconfig option `APP_CLAW_CAP_PLATFORM` (default `n`).
 
-- New capability group `cap_platform`, one tool: `platform_exec`. Flags:
-  `CALLABLE_BY_LLM | RESTRICTED` — reachable via the MQTT command bridge (unlike
-  `ROOT_AGENT_ONLY` tools), but every call requires a **signed token** the device verifies itself
-  before invoking the *real* target capability internally (bypassing the bridge's normal
-  `SUB_AGENT`-vs-`ROOT_AGENT`caller check for this one, deliberately narrow, path).
-- Token = `base64url(payload) + "." + base64url(HMAC-SHA256(payload, device_platform_secret))`,
-  `payload = { device_id, capability, input_hash, issued_at, expires_at (≤60s TTL), nonce }`.
-- `device_platform_secret`: a per-device secret, provisioned **once**, out-of-band (at
-  provisioning time, over the device's local HTTP API on first setup — the one surface that's
-  already local-only/trusted — never over MQTT, never reused as the MQTT broker credential).
-- On-device verification: recompute HMAC, check `expires_at`, check `nonce` against a small
-  in-RAM replay-window (bounded size — device has no persistent nonce store, so the 60s TTL is the
-  primary defense, the nonce window a secondary one within that TTL), check `input_hash` matches
-  the actual `input` in the same message (prevents token-for-A being replayed with input-for-B).
-  Only on all four passing does it invoke the real target capability internally, still subject to
-  that capability's own logic — `cap_platform` is an *authenticated trigger*, not a privilege
-  escalation around what the target capability itself does.
-- Platform side: a `TokenService` holding each device's `device_platform_secret` (encrypted at
-  rest — this is exactly the kind of per-device secret that graduates §22's "Vault: not now"
-  decision once volume justifies it, flagged there already), issuing a token per dispatch,
-  `CommandsService` includes it in the envelope only when targeting a capability it knows is
-  restricted.
+Two deliberate deviations from the original proposal above, made during implementation:
 
-**B. MCP server URL on `status`**
+- **Two tools, not one**: `platform_configure` (`ROOT_AGENT_ONLY`, sets the shared secret — NOT
+  reachable over MQTT, by the same caller-check this whole mechanism is built around) and
+  `platform_exec` (`RESTRICTED`, not `ROOT_AGENT_ONLY` — reachable over MQTT, verifies the token).
+  The secret is deliberately **not** added to the generic `/api/config` field table: that endpoint
+  still doesn't mask secrets on GET (§10.10's known gap), and a secret whose only job is signing
+  security tokens shouldn't sit next to that leak. It lives in its own NVS namespace
+  (`cap_platform`), independent of `app_config_t`.
+- **No separate `input_hash` field** — the token payload is
+  `{device_id, capability, input, issued_at, expires_at, nonce}` with the target's real `input`
+  embedded *directly* in the signed payload, and the signature covers the ASCII base64url text of
+  that payload (JWT-HS256-shaped), not the decoded JSON bytes. This avoids a real
+  canonicalization risk in the original design: hashing a separately-transmitted `input` object
+  requires the issuer and verifier to agree on one exact re-serialization of that JSON, which is
+  an unnecessary source of bugs. Signing the base64url text directly means both sides only need to
+  agree on one base64url encoding of one JSON string — nothing to canonicalize.
 
-Add one optional field to the existing birth/LWT payload: `{"online": true, "mcp_url":
-"http://<device-ip>:<port>/mcp"}` (omitted/absent when `cap_mcp_server` isn't running). Purely
-additive — `StatusEnvelopeSchema` on the platform side already needs a one-line change
-(`mcp_url: z.string().optional()`), no breaking change to existing parsers.
+**Live-verified** on real hardware (`ecda3b4ff7d4`, the same device used throughout this session),
+via the device's console (`cap call platform_configure {...}` / `cap call platform_exec {...}`),
+targeting the real `vpn_connect` capability (`ROOT_AGENT_ONLY`, side-effect-free in this device's
+current tailscale-gateway mode — it returns `{"ok":false,"error":"not in wireguard mode"}` without
+mutating any state, making it a safe live test target):
 
-**Both are designed, not yet implemented in `esp-claw-2`.** Confirm before I switch into that repo
-and write firmware C — this is the one part of "yes to all four" I'm treating as a design
-checkpoint rather than proceeding straight to code, given the security surface and that it runs on
-physical hardware.
+```
+1. platform_configure with a fresh random secret → {"ok":true,"note":"Platform secret set (32 bytes)..."}
+2. platform_exec, valid token, target=vpn_connect → {"ok":false,"error":"not in wireguard mode"}
+   (vpn_connect's REAL response — proves the signature verified and the internal escalation to
+   CLAW_CAP_CALLER_ROOT_AGENT actually reached and executed the target capability)
+3. platform_exec, SAME token replayed        → "Error: token nonce already used (replay)"
+4. platform_exec, tampered signature (1 byte flipped) → "Error: invalid token signature"
+5. platform_exec, correctly-signed but wrong device_id → "Error: token was issued for a different device"
+6. platform_exec, expired token (expires_at in the past) → "Error: token expired or not yet valid"
+```
+
+All six behaved exactly as designed; the device rebooted twice during testing (unrelated USB-CDC
+re-enumeration flakiness on this board, not a firmware crash) and came back up cleanly each time,
+with the real CloudAMQP connection re-establishing on its own.
+
+**Not yet built**: the platform-side `TokenService` that would actually issue these tokens in
+production (encrypted-at-rest per-device secret storage, `CommandsService` wiring to attach a
+token when targeting a restricted capability). The test above issued tokens by hand (PowerShell +
+`HMACSHA256`) to prove the device-side verifier is correct; a real `TokenService` is separate,
+not-yet-started work.
+
+**B. MCP server URL on `status` — NOT IMPLEMENTED (scope question, not a design detail)**
+
+While implementing (A), a check of what `edge_agent` actually runs found that **`cap_mcp_server`
+is never initialized or started in `edge_agent`** — `cap_mcp_server_init()`/`_start()` are only
+called from a separate, unrelated example application (`application/mcp_server_point/main/main.c`).
+`edge_agent`'s own `app_capabilities.c` has zero references to `cap_mcp_server` at all. This means
+§4/§19's "a device is both an MCP client and an MCP server" claim is only half-true for the actual
+deployed firmware: `cap_mcp_client` is real and wired up in `edge_agent`; `cap_mcp_server` is not.
+
+Announcing an `mcp_url` on the `status` topic would therefore describe a server that doesn't exist
+on real devices — not implemented, to avoid exactly that. This is now an open scope question for
+you, not a firmware detail: do you want `edge_agent` to actually run an MCP server (pulling in
+`cap_mcp_server` + `mcp_mdns` + an HTTP+mDNS surface, real flash/RAM/attack-surface cost), or does
+the MCP Gateway design (§19) need to be re-scoped around "outbound only" (§19.1, already real and
+unaffected by this) without an inbound-aggregation half at all?
