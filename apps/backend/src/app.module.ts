@@ -9,6 +9,7 @@ import { DatabaseModule } from "./database/database.module";
 import { DevicesModule } from "./devices/devices.module";
 import { CommandsModule } from "./commands/commands.module";
 import { TelemetryModule } from "./telemetry/telemetry.module";
+import { IdentityModule } from "./identity/identity.module";
 
 @Module({
   imports: [
@@ -18,6 +19,7 @@ import { TelemetryModule } from "./telemetry/telemetry.module";
     }),
     EventEmitterModule.forRoot(),
     DatabaseModule,
+    IdentityModule,
     HealthModule,
     EspClawModule,
     MqttModule,
