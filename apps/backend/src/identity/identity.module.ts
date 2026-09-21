@@ -4,7 +4,8 @@ import { ConfigService } from "@nestjs/config";
 import { JwtModule } from "@nestjs/jwt";
 import { TypeOrmModule } from "@nestjs/typeorm";
 import { User } from "./user.entity";
-import { IdentityService } from "./identity.service";
+import { ADMIN_BOOTSTRAP_TOKEN, IdentityService } from "./identity.service";
+import { LoginThrottle } from "./login-throttle";
 import { IdentityController } from "./identity.controller";
 import { JwtAuthGuard } from "./jwt-auth.guard";
 import type { Env } from "../config/env.validation";
@@ -21,7 +22,16 @@ import type { Env } from "../config/env.validation";
     }),
   ],
   controllers: [IdentityController],
-  providers: [IdentityService, { provide: APP_GUARD, useClass: JwtAuthGuard }],
+  providers: [
+    IdentityService,
+    LoginThrottle,
+    {
+      provide: ADMIN_BOOTSTRAP_TOKEN,
+      inject: [ConfigService],
+      useFactory: (config: ConfigService<Env, true>) => config.get("ADMIN_BOOTSTRAP_TOKEN", { infer: true }),
+    },
+    { provide: APP_GUARD, useClass: JwtAuthGuard },
+  ],
   exports: [IdentityService],
 })
 export class IdentityModule {}

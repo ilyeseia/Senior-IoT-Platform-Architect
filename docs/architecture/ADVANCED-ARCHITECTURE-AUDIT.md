@@ -16,9 +16,9 @@ with these corrections:
 ### Review of what landed on `main` (code read, not executed against a live server)
 | ID | Sev | Finding |
 |---|---|---|
-| **I1** | Med | `POST /auth/register` is public while the `users` table is empty: on a fresh deployment the first caller to reach the API becomes admin (bootstrap takeover). The `count()`-then-`save()` is not atomic, so two concurrent first requests can create two admins (only `email` is unique). |
-| **I2** | Med | No throttling on `POST /auth/login` (bcrypt cost 12): brute force and CPU exhaustion are unbounded. |
-| **I3** | Low/Med | `role` is stored and put in the JWT but nothing enforces it (no RBAC); tokens live 12 h with no revocation; HS256 with one shared secret. |
+| **I1** | Med — **fixed 2026-09-21** (bootstrap token + advisory lock, see IDENTITY-AUTH.md) | `POST /auth/register` is public while the `users` table is empty: on a fresh deployment the first caller to reach the API becomes admin (bootstrap takeover). The `count()`-then-`save()` is not atomic, so two concurrent first requests can create two admins (only `email` is unique). |
+| **I2** | Med — **fixed 2026-09-21** (429 lockout + constant-time miss) | No throttling on `POST /auth/login` (bcrypt cost 12): brute force and CPU exhaustion are unbounded. |
+| **I3** | Low/Med — open, no exploitable path until a second user can exist | `role` is stored and put in the JWT but nothing enforces it (no RBAC); tokens live 12 h with no revocation; HS256 with one shared secret. |
 | **T1** | Med | `TwinService.mergeReported` writes `reported[metric]` with **unqualified** metric names, so `connected` from `mqtt_status` and from `vpn_status` overwrite each other (same defect as B9 in telemetry). |
 | **T2** | Low | `PUT /devices/:id/shadow/desired` accepts any JSON object: no key allow-list, size or depth limit. Nested values always report drift (`!==`). `desiredVersion` also bumps on no-op writes (documented as intended). |
 | **T3** | Low | Read-modify-write of two JSONB columns without locking; safe today only because the poller is sequential. |

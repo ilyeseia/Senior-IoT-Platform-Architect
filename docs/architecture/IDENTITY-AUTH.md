@@ -70,6 +70,26 @@ POST /auth/login     (wrong password)           → 401
 # for whoever registers the actual first admin, not blocked by this test run.
 ```
 
+## Hardening pass (2026-09-21, audit findings I1 and I2)
+
+* **I1 — bootstrap takeover and race.** `register` now (a) requires `bootstrapToken` when
+  `ADMIN_BOOTSTRAP_TOKEN` is set (constant-time compare; 403 otherwise; **required by env validation
+  when `NODE_ENV=production`**), and (b) runs the count-and-insert in one transaction under
+  `pg_advisory_xact_lock`, so two concurrent first requests cannot both create an admin.
+* **I2 — brute force.** `LoginThrottle` (in-memory, sliding 15-minute window) refuses login with
+  **429** after 5 failed attempts per account or 20 per client address; a success clears the
+  account counter. Unknown emails are counted too, and an unknown email now costs one bcrypt
+  comparison (against a real dummy hash) so response time does not reveal which accounts exist.
+  In-process by design: per-replica once there is more than one instance (move to Redis with the
+  Redis stage).
+* **Live-verified** on the dev Postgres with a real Nest app (IdentityModule only; the table was
+  empty and was left empty): register without/with wrong token → 403; two concurrent registrations
+  → one 201 + one 409, one row; five wrong logins → 401 then 429, correct password while locked
+  out → 429. 102 backend tests pass.
+* **I3 (RBAC) intentionally not addressed:** `role` is only ever `admin` and there is no endpoint
+  that creates another user, so there is no exploitable path yet. It becomes real with the first
+  user-management endpoint (Stage 2).
+
 ## Not done (explicitly out of scope for this pass, not forgotten)
 
 - **RBAC / multiple roles** — `role` exists as a column but only `"admin"` is ever assigned; a real
@@ -79,9 +99,8 @@ POST /auth/login     (wrong password)           → 401
   stateless; there's no server-side session to revoke. Fine for one admin operating the platform
   directly; revisit once there's more than one user or a real incident-response need to force a
   logout.
-- **Rate limiting on `/auth/login`** — brute-force protection isn't in place yet; flagged, not
-  silently assumed solved. Belongs at the same API-gateway/guard level as the rate-limiting
-  mentioned in the evolution doc's §25, not reinvented here.
+- **Rate limiting beyond `/auth/login`** — login is now throttled (see the hardening pass above);
+  a general API rate limit still belongs at the gateway/guard level (evolution doc §25).
 - **Guarding the debug `/mqtt/*` and `/esp-claw/*` endpoints** — these now inherit the global guard
   automatically (they weren't marked `@Public()`), which is a real, if incidental, improvement — but
   they're still legacy debug surfaces per `ARCHITECTURE-EVOLUTION.md` §6/§10.6, and retiring them

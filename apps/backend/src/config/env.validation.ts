@@ -16,6 +16,8 @@
  *    degrade" a missing signing secret — an app that boots without one and
  *    signs tokens with a hardcoded fallback would be actively unsafe, not
  *    merely limited. `.env.example` documents the required shape.
+ *  - ADMIN_BOOTSTRAP_TOKEN (identity hardening, audit I1): secret required to
+ *    create the first admin. Optional in development, REQUIRED in production.
  *  - LOCAL_API_ALLOWED_HOSTS (Stage 0, SSRF guard): optional comma-separated
  *    hostnames LocalApiClient may contact in addition to private/Tailscale
  *    IPv4 literals, which are always allowed.
@@ -27,22 +29,35 @@
  */
 import { z } from "zod";
 
-export const envSchema = z.object({
-  NODE_ENV: z.enum(["development", "test", "production"]).default("development"),
-  PORT: z.coerce.number().int().positive().default(3000),
+export const envSchema = z
+  .object({
+    NODE_ENV: z.enum(["development", "test", "production"]).default("development"),
+    PORT: z.coerce.number().int().positive().default(3000),
 
-  MQTT_URL: z.string().url().optional(),
-  MQTT_BASE_TOPIC_PREFIX: z.string().min(1).default("espclaw"),
+    MQTT_URL: z.string().url().optional(),
+    MQTT_BASE_TOPIC_PREFIX: z.string().min(1).default("espclaw"),
 
-  DATABASE_URL: z.string().url(),
+    DATABASE_URL: z.string().url(),
 
-  REDIS_URL: z.string().url().optional(),
-  JWT_SECRET: z.string().min(16, "JWT_SECRET must be at least 16 characters"),
+    REDIS_URL: z.string().url().optional(),
+    JWT_SECRET: z.string().min(16, "JWT_SECRET must be at least 16 characters"),
 
-  TELEMETRY_POLL_INTERVAL_MS: z.coerce.number().int().positive().optional(),
+    TELEMETRY_POLL_INTERVAL_MS: z.coerce.number().int().positive().optional(),
 
-  LOCAL_API_ALLOWED_HOSTS: z.string().optional(),
-});
+    LOCAL_API_ALLOWED_HOSTS: z.string().optional(),
+
+    ADMIN_BOOTSTRAP_TOKEN: z.string().min(16, "ADMIN_BOOTSTRAP_TOKEN must be at least 16 characters").optional(),
+  })
+  .superRefine((env, ctx) => {
+    // Identity audit I1: without it, whoever reaches a fresh production deployment first becomes admin.
+    if (env.NODE_ENV === "production" && !env.ADMIN_BOOTSTRAP_TOKEN) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ["ADMIN_BOOTSTRAP_TOKEN"],
+        message: "ADMIN_BOOTSTRAP_TOKEN is required when NODE_ENV=production",
+      });
+    }
+  });
 
 export type Env = z.infer<typeof envSchema>;
 
