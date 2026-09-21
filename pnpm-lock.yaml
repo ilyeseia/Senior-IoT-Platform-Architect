@@ -37,6 +37,9 @@ importers:
       bcryptjs:
         specifier: ^2.4.3
         version: 2.4.3
+      dotenv:
+        specifier: ^16.4.5
+        version: 16.6.1
       mqtt:
         specifier: ^5.10.1
         version: 5.15.2

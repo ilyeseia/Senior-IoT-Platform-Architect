@@ -1,25 +1,19 @@
 import { Body, Controller, Get, Param, Post } from "@nestjs/common";
+import { parseBody } from "../common/validation/parse-body";
+import { dispatchCommandSchema } from "./commands.dto";
 import { CommandsService } from "./commands.service";
 
-interface DispatchCommandDto {
-  name: string;
-  input?: Record<string, unknown>;
-  baseTopic?: string;
-  timeoutMs?: number;
-}
-
 /**
- * The real, DB-backed replacement for MqttController's debug send endpoint
- * (PHASE1-ANALYSIS.md §26) — this is what a frontend (Phase 7) or any
- * automation (Phase 11) would actually call to command a device.
+ * The DB-backed command API (PHASE1-ANALYSIS.md §26): the only operator-facing
+ * way to command a device, and therefore the only path with an audit trail.
  */
 @Controller("devices/:deviceId/commands")
 export class CommandsController {
   constructor(private readonly commands: CommandsService) {}
 
   @Post()
-  dispatch(@Param("deviceId") deviceId: string, @Body() body: DispatchCommandDto) {
-    return this.commands.dispatch(deviceId, body);
+  dispatch(@Param("deviceId") deviceId: string, @Body() body: unknown) {
+    return this.commands.dispatch(deviceId, parseBody(dispatchCommandSchema, body));
   }
 
   @Get()

@@ -16,6 +16,9 @@
  *    degrade" a missing signing secret — an app that boots without one and
  *    signs tokens with a hardcoded fallback would be actively unsafe, not
  *    merely limited. `.env.example` documents the required shape.
+ *  - LOCAL_API_ALLOWED_HOSTS (Stage 0, SSRF guard): optional comma-separated
+ *    hostnames LocalApiClient may contact in addition to private/Tailscale
+ *    IPv4 literals, which are always allowed.
  *  - TELEMETRY_POLL_INTERVAL_MS (Architecture Evolution §13, Option B):
  *    optional, defaults to 60000ms in TelemetryPollerService itself — not
  *    required to boot, same reasoning as MQTT_URL: a sensible built-in
@@ -37,6 +40,8 @@ export const envSchema = z.object({
   JWT_SECRET: z.string().min(16, "JWT_SECRET must be at least 16 characters"),
 
   TELEMETRY_POLL_INTERVAL_MS: z.coerce.number().int().positive().optional(),
+
+  LOCAL_API_ALLOWED_HOSTS: z.string().optional(),
 });
 
 export type Env = z.infer<typeof envSchema>;

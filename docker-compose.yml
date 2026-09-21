@@ -4,7 +4,9 @@
 # would be building ahead of the phase that needs it.
 services:
   postgres:
-    image: timescale/timescaledb:latest-pg16
+    # Pinned (was :latest-pg16): an unpinned tag can change the TimescaleDB/Postgres minor version under an
+    # existing volume on the next `docker compose pull`. Bump deliberately, after reading the release notes.
+    image: timescale/timescaledb:2.30.1-pg16
     restart: unless-stopped
     environment:
       POSTGRES_USER: esp_claw
@@ -12,6 +14,11 @@ services:
       POSTGRES_DB: esp_claw_platform
     ports:
       - "5432:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U esp_claw -d esp_claw_platform"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
     volumes:
       - postgres_data:/var/lib/postgresql/data
 

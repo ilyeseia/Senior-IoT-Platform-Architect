@@ -111,6 +111,27 @@ describe("MqttService (integration, real protocol, local test broker)", () => {
     expect(res.capability).toBe("get_current_time");
   });
 
+  it("puts the caller-supplied id on the wire and correlates the response by it (audit B1)", async () => {
+    const seen: string[] = [];
+    const spy = mqtt.connect(brokerUrl);
+    await new Promise<void>((resolve) => spy.on("connect", () => resolve()));
+    spy.subscribe(`${baseTopic}/${deviceId}/command`);
+    spy.on("message", (_t, payload) => seen.push(JSON.parse(payload.toString("utf8")).id));
+
+    try {
+      const id = "11111111-2222-3333-4444-555555555555";
+      const res = await service.sendCommand(deviceId, { name: "get_current_time" }, { id });
+      expect(res.id).toBe(id);
+      await waitUntil(() => seen.includes(id));
+      // a second in-flight command may not reuse the same id
+      const first = service.sendCommand(deviceId, { name: "will_never_reply" }, { id: "dup", timeoutMs: 300 });
+      await expect(service.sendCommand(deviceId, { name: "x" }, { id: "dup" })).rejects.toThrow(/already in flight/);
+      await expect(first).rejects.toThrow(/timed out/);
+    } finally {
+      spy.end(true);
+    }
+  });
+
   it("rejects when no response arrives before the timeout", async () => {
     await expect(
       service.sendCommand(deviceId, { name: "will_never_reply" }, { timeoutMs: 200 }),

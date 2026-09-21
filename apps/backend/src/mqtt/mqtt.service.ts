@@ -135,17 +135,25 @@ export class MqttService implements OnModuleInit, OnModuleDestroy {
    * {id, action:"capability", name, input} to the device's `command` topic,
    * resolve when a {id, ok, result} response arrives on `response`, or
    * reject on timeout.
+   *
+   * `options.id` is the wire correlation id. CommandsService passes its own
+   * `commands.id` here so the DB row, the MQTT message and the device's
+   * response all share ONE id (audit/tracing depends on it). Only callers
+   * with no DB record (tests) let it default to a fresh UUID.
    */
   sendCommand(
     deviceId: string,
     command: { name: string; input?: Record<string, unknown> },
-    options?: { baseTopic?: string; timeoutMs?: number },
+    options?: { baseTopic?: string; timeoutMs?: number; id?: string },
   ): Promise<ResponseEnvelope> {
     if (!this.client) {
       return Promise.reject(new Error("MQTT client is not connected (MQTT_URL not set)"));
     }
     const timeoutMs = options?.timeoutMs ?? DEFAULT_COMMAND_TIMEOUT_MS;
-    const id = randomUUID();
+    const id = options?.id ?? randomUUID();
+    if (this.pending.has(id)) {
+      return Promise.reject(new Error(`Command id ${id} is already in flight`));
+    }
     const envelope: CommandEnvelope = {
       id,
       action: "capability",

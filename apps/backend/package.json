@@ -19,6 +19,7 @@
     "@nestjs/platform-express": "^10.4.4",
     "@nestjs/typeorm": "^10.0.2",
     "bcryptjs": "^2.4.3",
+    "dotenv": "^16.4.5",
     "mqtt": "^5.10.1",
     "pg": "^8.13.0",
     "reflect-metadata": "^0.2.2",

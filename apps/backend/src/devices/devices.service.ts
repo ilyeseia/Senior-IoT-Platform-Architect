@@ -6,6 +6,7 @@ import { capabilityGroupIds } from "@esp-claw/protocol";
 import { Device } from "./device.entity";
 import { DeviceCapability } from "./device-capability.entity";
 import { LocalApiClient } from "../esp-claw/local-api-client";
+import { LocalTargetError } from "../esp-claw/local-target";
 import type { DeviceStatusEvent } from "../mqtt/mqtt.events";
 
 @Injectable()
@@ -88,11 +89,21 @@ export class DevicesService {
     if (!device) {
       throw new NotFoundException(`Device ${id} not found`);
     }
-    const url = (baseUrl ?? device.localApiBaseUrl ?? "").trim();
-    if (!url) {
+    const requested = (baseUrl ?? device.localApiBaseUrl ?? "").trim();
+    if (!requested) {
       throw new BadRequestException(
         "No local API base URL known for this device — pass { baseUrl } or set it first",
       );
+    }
+    let url: string;
+    try {
+      // SSRF guard (audit B3): never let an API caller point the backend at an arbitrary host.
+      url = this.localApi.validateBaseUrl(requested);
+    } catch (err) {
+      if (err instanceof LocalTargetError) {
+        throw new BadRequestException(`Invalid device URL: ${err.message}`);
+      }
+      throw err;
     }
 
     const catalog = await this.localApi.fetchCapabilities(url);

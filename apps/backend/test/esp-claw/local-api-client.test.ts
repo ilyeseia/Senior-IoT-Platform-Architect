@@ -57,3 +57,39 @@ describe("LocalApiClient", () => {
     expect(status.ip).toBe("10.0.0.9");
   });
 });
+
+describe("LocalApiClient SSRF policy", () => {
+  afterEach(() => vi.restoreAllMocks());
+
+  it("never calls fetch for a public host", async () => {
+    const fetchMock = vi.fn();
+    vi.stubGlobal("fetch", fetchMock);
+    await expect(new LocalApiClient().fetchStatus("http://8.8.8.8")).rejects.toThrow(/host must be/);
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+
+  it("does not follow redirects (a redirect could leave the vetted host)", async () => {
+    const fetchMock = vi.fn(async () => new Response(null, { status: 302, headers: { location: "http://8.8.8.8/" } }));
+    vi.stubGlobal("fetch", fetchMock);
+    await expect(new LocalApiClient().fetchStatus("10.0.0.9")).rejects.toThrow();
+    expect(fetchMock).toHaveBeenCalledWith(
+      "http://10.0.0.9/api/status",
+      expect.objectContaining({ redirect: "manual" }),
+    );
+  });
+
+  it("refuses an oversized response", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () => new Response("{}", { status: 200, headers: { "content-length": String(10 * 1024 * 1024) } })),
+    );
+    await expect(new LocalApiClient().fetchStatus("10.0.0.9")).rejects.toThrow(/too large/);
+  });
+
+  it("honours the operator host allow-list", async () => {
+    vi.stubGlobal("fetch", vi.fn(async () => new Response(JSON.stringify({ items: [] }), { status: 200 })));
+    const client = new LocalApiClient(["dev.tail1234.ts.net"]);
+    await expect(client.fetchCapabilities("dev.tail1234.ts.net")).resolves.toEqual({ items: [] });
+    expect(client.validateBaseUrl("dev.tail1234.ts.net")).toBe("http://dev.tail1234.ts.net");
+  });
+});

@@ -1,4 +1,4 @@
-import { Injectable, Logger } from "@nestjs/common";
+import { Injectable, Logger, NotFoundException, OnModuleInit } from "@nestjs/common";
 import { InjectRepository } from "@nestjs/typeorm";
 import { randomUUID } from "crypto";
 import { Repository } from "typeorm";
@@ -11,7 +11,6 @@ import { CommandResult } from "./command-result.entity";
 export interface DispatchInput {
   name: string;
   input?: Record<string, unknown>;
-  baseTopic?: string;
   timeoutMs?: number;
 }
 
@@ -22,6 +21,9 @@ export interface DispatchOutcome {
 
 const DEFAULT_TIMEOUT_MS = 15000;
 
+/** Authorization denials as reported by the device (see classify()). */
+const DENIAL_PATTERN = /is not exposed to the LLM|^Denied agent cap call/;
+
 /**
  * The real "Command Service" from the architecture (PHASE1-ANALYSIS.md §B):
  * the only thing that both writes command history AND calls MqttService to
@@ -29,7 +31,7 @@ const DEFAULT_TIMEOUT_MS = 15000;
  * the DB-backed history/status-classification on top of it.
  */
 @Injectable()
-export class CommandsService {
+export class CommandsService implements OnModuleInit {
   private readonly logger = new Logger(CommandsService.name);
 
   constructor(
@@ -39,12 +41,37 @@ export class CommandsService {
     private readonly devices: DevicesService,
   ) {}
 
+  /**
+   * Audit B7: command correlation lives in MqttService's in-memory map (single
+   * instance), so any command still `pending` when the process starts can
+   * never receive its response — it was orphaned by a crash/restart. Close
+   * them out instead of leaving them `pending` forever. This assumes one
+   * backend instance, exactly like the in-memory map itself; it must move
+   * behind a lease/owner column when Redis-backed correlation lands.
+   */
+  async onModuleInit(): Promise<void> {
+    try {
+      const swept = await this.commands.update(
+        { status: "pending" },
+        { status: "timed_out", resolvedAt: new Date() },
+      );
+      if (swept.affected) {
+        this.logger.warn(`Closed ${swept.affected} orphaned pending command(s) left by a previous run`);
+      }
+    } catch (err) {
+      this.logger.error(`Orphaned-command sweep failed: ${(err as Error).message}`);
+    }
+  }
+
   async dispatch(deviceId: string, input: DispatchInput): Promise<DispatchOutcome> {
-    // Ensure the device has a registry row even if it's never sent a status
-    // message yet (e.g. a freshly provisioned device being commanded before
-    // its first MQTT connection) — baseTopic defaults match TopicService's
-    // own default when none is given.
-    await this.devices.findOrCreate(deviceId, input.baseTopic ?? "espclaw");
+    // Only registered devices can be commanded (audit B2: dispatching used to
+    // auto-create a registry row for any string). Devices register themselves
+    // from their retained `status` birth message. The topic prefix always comes
+    // from the registry row, never from the caller (audit B4).
+    const device = await this.devices.findOne(deviceId);
+    if (!device) {
+      throw new NotFoundException(`Device ${deviceId} is not registered`);
+    }
 
     const id = randomUUID();
     const timeoutMs = input.timeoutMs ?? DEFAULT_TIMEOUT_MS;
@@ -65,10 +92,9 @@ export class CommandsService {
       response = await this.mqtt.sendCommand(
         deviceId,
         { name: input.name, input: input.input },
-        { baseTopic: input.baseTopic, timeoutMs },
+        // Same id on the DB row, the MQTT message and the response (audit B1).
+        { baseTopic: device.baseTopic, timeoutMs, id },
       );
-      // sendCommand() generates its own wire "id" internally (it doesn't
-      // accept ours) — see the note in resolveOutcome() for why that's fine.
     } catch (err) {
       return this.resolveOutcome(command, {
         id,
@@ -104,20 +130,25 @@ export class CommandsService {
   }
 
   /**
-   * "rejected" vs "failed" (PHASE1-ANALYSIS.md §C): the real cap_mqtt bridge
-   * denies a RESTRICTED/ROOT_AGENT_ONLY capability with
-   * ok:false + a result string starting "Denied agent cap call..." — verified
-   * live this session (this session's own MQTT-bridge security-bypass
-   * finding and fix). Everything else that fails is a real device-side error.
+   * "rejected" vs "failed": the device's authorization layer (claw_cap.c)
+   * denies a call the caller may not make (ROOT_AGENT_ONLY, LOCAL_ONLY, not
+   * LLM-callable, ...) with `ok:false` and
+   *   "Error: cap '<name>' is not exposed to the LLM[ (reason=<why>)]."
+   * ("Denied agent cap call ..." is only a device-side LOG line, never part of
+   * the response — matching on it alone, as this method used to, classified
+   * every real denial as "failed"; audit B13.) The legacy prefix is still
+   * accepted for older firmware/docs. Everything else that fails is a real
+   * device-side error.
    */
   private classify(response: ResponseEnvelope): CommandStatus {
     if (response.ok) {
       return "succeeded";
     }
-    if (response.result?.startsWith("Denied agent cap call")) {
+    const text = response.result ?? "";
+    if (DENIAL_PATTERN.test(text)) {
       return "rejected";
     }
-    if (response.result?.includes("timed out")) {
+    if (text.includes("timed out")) {
       return "timed_out";
     }
     return "failed";

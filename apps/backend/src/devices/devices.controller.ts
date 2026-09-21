@@ -1,12 +1,14 @@
 import { Body, Controller, Get, NotFoundException, Param, Post } from "@nestjs/common";
+import { z } from "zod";
+import { parseBody } from "../common/validation/parse-body";
 import { DevicesService } from "./devices.service";
 
+const refreshCapabilitiesSchema = z.object({ baseUrl: z.string().min(1).max(255).optional() }).strict();
+
 /**
- * The real Device Registry API (PHASE1-ANALYSIS.md §26), superseding
- * MqttController's /mqtt/presence debug view as the source of truth a
- * frontend (Phase 7) would actually use — /mqtt/presence stays as a
- * low-level view of the in-memory map for comparing against this
- * DB-backed one while developing.
+ * The real Device Registry API (PHASE1-ANALYSIS.md §26), the
+ * source of truth a frontend (Phase 7) would use. (The old /mqtt/presence
+ * debug view was removed in Stage 0 — see MqttModule.)
  */
 @Controller("devices")
 export class DevicesController {
@@ -39,7 +41,8 @@ export class DevicesController {
    * localApiBaseUrl is used. Introspection only — never touches /api/config.
    */
   @Post(":id/capabilities/refresh")
-  refreshCapabilities(@Param("id") id: string, @Body() body?: { baseUrl?: string }) {
-    return this.devices.refreshCapabilities(id, body?.baseUrl);
+  refreshCapabilities(@Param("id") id: string, @Body() body?: unknown) {
+    const parsed = parseBody(refreshCapabilitiesSchema, body ?? {});
+    return this.devices.refreshCapabilities(id, parsed.baseUrl);
   }
 }
