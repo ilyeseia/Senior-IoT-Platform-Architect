@@ -19,7 +19,7 @@ Firmware-side findings and fixes: [FIRMWARE-HARDENING.md](docs/architecture/FIRM
 | — | Telemetry (poll existing capabilities → hypertable) | done |
 | — | Identity (JWT, first-admin bootstrap), Digital Twin v1 | done |
 | Stage 0 | Stabilization (audit B1, B3, B4, B7, B8, B12, B13) | done |
-| Stage 1 | EventBus + envelope, append-only audit log, enforced module boundaries, `/v1`, error envelope, health/metrics, JSON logs ([STAGE1](docs/architecture/STAGE1-EVENTS-AND-BOUNDARIES.md)) | done, migrations 0007/0008 not yet on the dev DB |
+| Stage 1 | EventBus + envelope, append-only audit log, enforced module boundaries, `/v1`, error envelope, health/metrics, JSON logs ([STAGE1](docs/architecture/STAGE1-EVENTS-AND-BOUNDARIES.md)) | done, applied to the dev DB |
 | Stage 2+ | RBAC/organizations, per-device credentials, twin reconciliation, OTA, agents (audit §29) | proposed |
 
 ## Development

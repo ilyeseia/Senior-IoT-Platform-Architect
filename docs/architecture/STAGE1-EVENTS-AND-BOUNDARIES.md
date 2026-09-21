@@ -60,7 +60,7 @@ app.module / main                 composition root: every module's public API
 * Error responses have a new body shape (previously Nest's `{statusCode,message,error}`).
 * Presence is now event-driven: `device.status` (EventEmitter2) is replaced by `device.presence.reported`.
 * `@nestjs/event-emitter` removed; `prom-client` added.
-* Migrations `0007`, `0008` run on next boot (`migrationsRun: true`) — **not yet applied to the shared dev database**.
+* Migrations `0007`, `0008` were **applied to the shared dev database on 2026-09-21** with `migration:run` (the app itself was not booted); any other instance now sees the two new objects.
 
 ## 3. Verification
 | Check | Result |
@@ -69,7 +69,8 @@ app.module / main                 composition root: every module's public API
 | Backend tests | **211 passed** (was 90): event bus (ordering, isolation, retry, timeout, no deadlock), envelope/context, presence transitions and the flap ordering, command/twin/telemetry events, audit service, error filter, versioning middleware, metrics, JSON logger, health, architecture test |
 | Migrations `0007`/`0008` + `EventLogService` on the real dev Postgres, **in an isolated scratch schema** (dropped afterwards; `public` untouched) | up ok; duplicate delivery collapsed; non-audited events skipped; cursor paging and filters correct; `UPDATE`/`DELETE`/`TRUNCATE` rejected by the database; `down()` removes the table; no schema left behind |
 | Real Nest app over HTTP (compiled `dist`, real guard/filter/versioning/metrics/health; DB and MQTT stubbed) | `/x` and `/v1/x` both 200 (unversioned carries `Deprecation`), `/v2/x` 404 envelope; 401/400/500 envelopes with correlation id; 500 does not leak; `/health` public, `/health/ready` 503 when DB down; `/metrics` 401 without token, Prometheus content type, route templates only. This run **found and fixed** a wrong `Content-Type` on `/metrics` |
-| **Not verified** | The full `AppModule` was **not booted against the shared dev DB** (it would apply 0007/0008 there and run the B7 sweep); live MQTT event flow with a device; OpenAPI (deferred) |
+| Applied to the dev database (`migration:run`) | `migration:show` 1–8 all `[X]`; `event_log` has the two append-only triggers; on the **real** table `UPDATE`/`DELETE`/`TRUNCATE` on a row are rejected (tested inside a rolled-back transaction, nothing persisted); `commands.correlation_id` present; `telemetry` still a hypertable; all tables empty before and after |
+| **Not verified** | The full `AppModule` was **not booted against the shared dev DB** (it would run the B7 sweep); live MQTT event flow with a device; OpenAPI (deferred) |
 
 ## 4. Deliberately not done (and why)
 * **Transactional outbox** — its job is DB→external-bus at-least-once delivery; with only an in-process consumer set there is nothing to relay to. The append-only `event_log` already covers durability of the important events. Add the outbox in the same change that introduces NATS (audit §20 triggers).
