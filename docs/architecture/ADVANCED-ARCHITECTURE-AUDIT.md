@@ -18,7 +18,7 @@ with these corrections:
 |---|---|---|
 | **I1** | Med — **fixed 2026-09-21** (bootstrap token + advisory lock, see IDENTITY-AUTH.md) | `POST /auth/register` is public while the `users` table is empty: on a fresh deployment the first caller to reach the API becomes admin (bootstrap takeover). The `count()`-then-`save()` is not atomic, so two concurrent first requests can create two admins (only `email` is unique). |
 | **I2** | Med — **fixed 2026-09-21** (429 lockout + constant-time miss) | No throttling on `POST /auth/login` (bcrypt cost 12): brute force and CPU exhaustion are unbounded. |
-| **I3** | Low/Med — open, no exploitable path until a second user can exist | `role` is stored and put in the JWT but nothing enforces it (no RBAC); tokens live 12 h with no revocation; HS256 with one shared secret. |
+| **I3** | Low/Med — **fixed 2026-09-21** (RBAC enforced per route, live role, revocation; see STAGE2 doc) | `role` is stored and put in the JWT but nothing enforces it (no RBAC); tokens live 12 h with no revocation; HS256 with one shared secret. |
 | **T1** | Med | `TwinService.mergeReported` writes `reported[metric]` with **unqualified** metric names, so `connected` from `mqtt_status` and from `vpn_status` overwrite each other (same defect as B9 in telemetry). |
 | **T2** | Low | `PUT /devices/:id/shadow/desired` accepts any JSON object: no key allow-list, size or depth limit. Nested values always report drift (`!==`). `desiredVersion` also bumps on no-op writes (documented as intended). |
 | **T3** | Low | Read-modify-write of two JSONB columns without locking; safe today only because the poller is sequential. |
@@ -507,7 +507,7 @@ destructive migration without a written rollback.
   except `commands` (additive).*
 * **Stage 1 — Boundaries + events — DONE 2026-09-21, see [STAGE1-EVENTS-AND-BOUNDARIES.md](STAGE1-EVENTS-AND-BOUNDARIES.md)** (outbox and OpenAPI deliberately deferred, reasons there): module public APIs + lint rule, `EventBus` + envelope + outbox, `/v1`,
   validation, OpenAPI, observability basics. *Additive migrations only.*
-* **Stage 2 — Identity + registry:** users/orgs/RBAC, `org_id` nullable → backfill to a default org →
+* **Stage 2 — Identity + registry — PARTLY DONE 2026-09-21 (RBAC, revocation, TokenService/privileged ops), see [STAGE2-RBAC-AND-PROVISIONING.md](STAGE2-RBAC-AND-PROVISIONING.md); organizations and broker credentials still open:** users/orgs/RBAC, `org_id` nullable → backfill to a default org →
   `NOT NULL`, `device_tools`, per-device credentials/ACL. *Backfill is reversible (column drop).*
 * **Stage 3 — Data plane v2:** `device_twin`, alerts, telemetry v2 (dedicated probe, retention).
 * **Stage 4 — Firmware/OTA + MinIO + TokenService** (needs the firmware hardening from §26-1).

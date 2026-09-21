@@ -97,5 +97,7 @@ describe("route permissions", () => {
     expect(by["UsersController.create"]).toBe("users:manage");
     expect(by["UsersController.update"]).toBe("users:manage");
     expect(by["UsersController.resetPassword"]).toBe("users:manage");
+    expect(by["ProvisioningController.execute"]).toBe("devices:privileged");
+    expect(by["ProvisioningController.targets"]).toBe("devices:privileged");
   });
 });

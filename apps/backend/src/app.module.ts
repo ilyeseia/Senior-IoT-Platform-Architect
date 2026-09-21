@@ -13,6 +13,7 @@ import { IdentityModule } from "./identity";
 import { TwinModule } from "./twin";
 import { AuditModule } from "./audit";
 import { ObservabilityModule } from "./observability";
+import { ProvisioningModule } from "./provisioning";
 import { ApiExceptionFilter, ApiVersionMiddleware, CorrelationMiddleware, EventsModule } from "./platform";
 
 @Module({
@@ -33,6 +34,7 @@ import { ApiExceptionFilter, ApiVersionMiddleware, CorrelationMiddleware, Events
     TelemetryModule,
     AuditModule,
     ObservabilityModule,
+    ProvisioningModule,
   ],
   providers: [{ provide: APP_FILTER, useClass: ApiExceptionFilter }],
 })

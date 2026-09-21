@@ -18,6 +18,7 @@
  *    merely limited. `.env.example` documents the required shape.
  *  - ADMIN_BOOTSTRAP_TOKEN (identity hardening, audit I1): secret required to
  *    create the first admin. Optional in development, REQUIRED in production.
+ *  - PLATFORM_MASTER_KEY (Stage 2): optional master key for platform_exec device secrets.
  *  - LOCAL_API_ALLOWED_HOSTS (Stage 0, SSRF guard): optional comma-separated
  *    hostnames LocalApiClient may contact in addition to private/Tailscale
  *    IPv4 literals, which are always allowed.
@@ -45,6 +46,16 @@ export const envSchema = z
     TELEMETRY_POLL_INTERVAL_MS: z.coerce.number().int().positive().optional(),
 
     LOCAL_API_ALLOWED_HOSTS: z.string().optional(),
+
+    /**
+     * Master key for per-device `platform_exec` signing secrets (base64url, >= 32 bytes = 43 chars).
+     * Optional: without it privileged operations answer 503 and nothing else is affected.
+     * Generate: node -e "console.log(require('crypto').randomBytes(32).toString('base64url'))"
+     */
+    PLATFORM_MASTER_KEY: z
+      .string()
+      .regex(/^[A-Za-z0-9_-]{43,}$/, "PLATFORM_MASTER_KEY must be base64url encoding at least 32 bytes")
+      .optional(),
 
     /** "json" = one JSON object per log line (default in production); "text" = Nest's pretty logs. */
     LOG_FORMAT: z.enum(["text", "json"]).optional(),

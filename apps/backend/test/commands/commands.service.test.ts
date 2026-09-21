@@ -66,6 +66,13 @@ describe("CommandsService.dispatch", () => {
     ["ok:true", { id: "i", ok: true, result: "r" }, "succeeded"],
     ["legacy denial prefix", { id: "i", ok: false, result: "Denied agent cap call ... reason=root_agent_only" }, "rejected"],
     ["real device denial text (audit B13)", { id: "i", ok: false, result: "Error: cap 'ota_update' is not exposed to the LLM." }, "rejected"],
+    ["platform_exec: bad signature", { id: "i", ok: false, result: "Error: invalid token signature" }, "rejected"],
+    ["platform_exec: expired", { id: "i", ok: false, result: "Error: token expired or not yet valid" }, "rejected"],
+    ["platform_exec: replay", { id: "i", ok: false, result: "Error: token nonce already used (replay)" }, "rejected"],
+    ["platform_exec: other device", { id: "i", ok: false, result: "Error: token was issued for a different device" }, "rejected"],
+    ["platform_exec: target not allowed", { id: "i", ok: false, result: "Error: capability 'ssh_configure' cannot be triggered through platform_exec" }, "rejected"],
+    ["platform_exec: not provisioned", { id: "i", ok: false, result: "Error: platform secret not configured (run platform_configure locally first)" }, "rejected"],
+    ["a real target failure stays failed", { id: "i", ok: false, result: "Error: failed to apply MQTT config (ESP_FAIL)" }, "failed"],
     ["denial with reason", { id: "i", ok: false, result: "Error: cap 'write_file' is not exposed to the LLM (reason=local_only)." }, "rejected"],
     ["device-side timeout text", { id: "i", ok: false, result: "operation timed out" }, "timed_out"],
     ["other failure", { id: "i", ok: false, result: "boom" }, "failed"],
@@ -85,6 +92,28 @@ describe("CommandsService.dispatch", () => {
     const { command, result } = await c.service.dispatch("dev1", { name: "n" });
     expect(command.status).toBe("timed_out");
     expect(result.ok).toBe(false);
+  });
+});
+
+describe("CommandsService record override (privileged commands)", () => {
+  it("persists and announces the record while the wire carries the real payload", async () => {
+    const c = makeService({});
+    const { command } = await c.service.dispatch("dev1", {
+      name: "platform_exec",
+      input: { token: "SECRET.TOKEN" },
+      record: { name: "platform_exec:ota_update", input: { url: "https://x", sha256: "ab" } },
+    });
+    expect(command.name).toBe("platform_exec:ota_update");
+    expect(command.input).toEqual({ url: "https://x", sha256: "ab" });
+    expect(c.mqtt.sendCommand.mock.calls[0][1]).toEqual({ name: "platform_exec", input: { token: "SECRET.TOKEN" } });
+    expect(JSON.stringify([...c.bus.events, command])).not.toContain("SECRET.TOKEN");
+    expect(c.bus.ofType("device.command.created")[0].payload).toMatchObject({ name: "platform_exec:ota_update" });
+  });
+
+  it("without a record the wire values are what is persisted (unchanged behaviour)", async () => {
+    const c = makeService({});
+    const { command } = await c.service.dispatch("dev1", { name: "mqtt_status", input: { a: 1 } });
+    expect(command).toMatchObject({ name: "mqtt_status", input: { a: 1 } });
   });
 });
 

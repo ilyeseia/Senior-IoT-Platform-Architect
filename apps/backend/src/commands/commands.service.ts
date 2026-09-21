@@ -11,9 +11,16 @@ import { Command, CommandStatus } from "./command.entity";
 import { CommandResult } from "./command-result.entity";
 
 export interface DispatchInput {
+  /** What goes on the wire to the device. */
   name: string;
   input?: Record<string, unknown>;
   timeoutMs?: number;
+  /**
+   * What is PERSISTED and announced instead of the wire values, when they differ. Used for
+   * privileged commands: the wire carries a signed token (and possibly credentials) that must not be
+   * stored, so the history records the logical operation with secrets already redacted.
+   */
+  record?: { name: string; input: Record<string, unknown> };
 }
 
 export interface DispatchOutcome {
@@ -23,8 +30,13 @@ export interface DispatchOutcome {
 
 const DEFAULT_TIMEOUT_MS = 15000;
 
-/** Authorization denials as reported by the device (see classify()). */
-const DENIAL_PATTERN = /is not exposed to the LLM|^Denied agent cap call/;
+/**
+ * Authorization denials as reported by the device (see classify()): the capability layer's
+ * "not exposed" refusal, and cap_platform's refusals of a platform_exec token (bad signature,
+ * expired, replayed, wrong device, target not in its allow-list, secret not provisioned).
+ */
+const DENIAL_PATTERN =
+  /is not exposed to the LLM|^Denied agent cap call|^Error: (invalid token signature|malformed token|token expired|token was issued for a different device|token nonce already used|platform secret not configured|capability '[^']*' cannot be triggered through platform_exec)/;
 
 /**
  * The real "Command Service" from the architecture (PHASE1-ANALYSIS.md §B):
@@ -87,8 +99,8 @@ export class CommandsService implements OnModuleInit {
       this.commands.create({
         id,
         deviceId,
-        name: input.name,
-        input: input.input ?? {},
+        name: input.record?.name ?? input.name,
+        input: input.record?.input ?? input.input ?? {},
         status: "pending",
         timeoutMs,
         correlationId,
@@ -102,7 +114,7 @@ export class CommandsService implements OnModuleInit {
         deviceId,
         causationId: id,
         correlationId,
-        payload: { commandId: id, name: input.name, timeoutMs },
+        payload: { commandId: id, name: input.record?.name ?? input.name, timeoutMs },
       }),
     );
 

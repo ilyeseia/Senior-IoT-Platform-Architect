@@ -33,6 +33,7 @@ const ALLOWED: Record<string, string[]> = {
   twin: ["devices"],
   health: ["mqtt"], // readiness reports broker state
   observability: ["mqtt"], // metrics observe the platform; nothing depends on observability
+  provisioning: ["commands"], // device signing secrets + privileged operations, sent through the command path
 };
 
 const APP_ROOT_FILES = new Set(["app.module.ts", "main.ts"]); // composition root: may import every module's public API
