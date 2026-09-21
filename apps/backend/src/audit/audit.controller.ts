@@ -1,4 +1,5 @@
 import { Controller, Get, Query } from "@nestjs/common";
+import { RequirePermission } from "../platform";
 import { z } from "zod";
 import { parseBody } from "../common/validation/parse-body";
 import { EventLogService } from "./event-log.service";
@@ -21,6 +22,7 @@ const querySchema = z
 export class AuditController {
   constructor(private readonly log: EventLogService) {}
 
+  @RequirePermission("audit:read")
   @Get("events")
   async events(@Query() rawQuery: unknown) {
     const q = parseBody(querySchema, rawQuery);

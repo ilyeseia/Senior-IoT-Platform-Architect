@@ -31,7 +31,7 @@ const ALLOWED: Record<string, string[]> = {
   commands: ["devices", "mqtt"],
   telemetry: ["devices", "commands"],
   twin: ["devices"],
-  health: ["identity", "mqtt"], // readiness reports broker state
+  health: ["mqtt"], // readiness reports broker state
   observability: ["mqtt"], // metrics observe the platform; nothing depends on observability
 };
 

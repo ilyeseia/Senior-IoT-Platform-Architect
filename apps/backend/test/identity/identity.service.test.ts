@@ -6,50 +6,7 @@ import { IdentityService } from "../../src/identity/identity.service";
 import { User } from "../../src/identity/user.entity";
 import { LoginThrottle, MAX_FAILURES_PER_ACCOUNT } from "../../src/identity/login-throttle";
 import { envSchema } from "../../src/config/env.validation";
-
-/**
- * A minimal in-memory stand-in for Repository<User> — only the methods
- * IdentityService actually calls — rather than a deep mock of TypeORM's full
- * Repository surface. Matches this codebase's existing preference for real
- * collaborators over mocking frameworks (mqtt.service.integration.test.ts uses
- * a real aedes broker for the same reason).
- *
- * `manager.transaction` runs transactions strictly one at a time, which is what the Postgres
- * advisory lock in IdentityService.register() guarantees in production.
- */
-function fakeUserRepo(): Repository<User> {
-  const rows: User[] = [];
-  const save = async (user: User) => {
-    const withId = { ...user, id: user.id ?? `user-${rows.length + 1}`, createdAt: new Date() };
-    rows.push(withId);
-    return withId;
-  };
-  const count = async () => rows.length;
-
-  let queue: Promise<unknown> = Promise.resolve();
-  const manager = {
-    transaction: <T>(work: (tx: unknown) => Promise<T>): Promise<T> => {
-      const run = queue.then(() =>
-        work({
-          query: async () => undefined,
-          count,
-          create: (_target: unknown, partial: Partial<User>) => partial as User,
-          save,
-        }),
-      );
-      queue = run.catch(() => undefined);
-      return run;
-    },
-  };
-
-  return {
-    count,
-    findOne: async ({ where }: { where: { email: string } }) => rows.find((r) => r.email === where.email) ?? null,
-    create: (partial: Partial<User>) => partial as User,
-    save,
-    manager,
-  } as unknown as Repository<User>;
-}
+import { fakeUserRepo } from "../helpers/fake-user-repo";
 
 describe("IdentityService", () => {
   let repo: Repository<User>;

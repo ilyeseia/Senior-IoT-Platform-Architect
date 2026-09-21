@@ -1,4 +1,5 @@
 import { BadRequestException, Controller, Get, Query } from "@nestjs/common";
+import { RequirePermission } from "../platform";
 import { TopicService } from "./topic.service";
 
 /**
@@ -10,6 +11,7 @@ import { TopicService } from "./topic.service";
 export class EspClawController {
   constructor(private readonly topics: TopicService) {}
 
+  @RequirePermission("devices:read")
   @Get("topics")
   getTopics(@Query("deviceId") deviceId?: string, @Query("baseTopic") baseTopic?: string) {
     if (!deviceId) {

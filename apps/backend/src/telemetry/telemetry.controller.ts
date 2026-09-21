@@ -1,4 +1,5 @@
 import { BadRequestException, Controller, Get, Param, Query } from "@nestjs/common";
+import { RequirePermission } from "../platform";
 import { TelemetryService } from "./telemetry.service";
 
 /** Read side of Data Plane telemetry (§13). Write side is TelemetryPollerService — no ingest endpoint exists yet (nothing pushes telemetry in from outside the poller today). */
@@ -6,6 +7,7 @@ import { TelemetryService } from "./telemetry.service";
 export class TelemetryController {
   constructor(private readonly telemetry: TelemetryService) {}
 
+  @RequirePermission("telemetry:read")
   @Get()
   findForDevice(
     @Param("id") id: string,

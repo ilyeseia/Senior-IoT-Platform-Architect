@@ -1,4 +1,5 @@
 import { Body, Controller, Get, Param, Post } from "@nestjs/common";
+import { RequirePermission } from "../platform";
 import { parseBody } from "../common/validation/parse-body";
 import { dispatchCommandSchema } from "./commands.dto";
 import { CommandsService } from "./commands.service";
@@ -11,11 +12,13 @@ import { CommandsService } from "./commands.service";
 export class CommandsController {
   constructor(private readonly commands: CommandsService) {}
 
+  @RequirePermission("commands:dispatch")
   @Post()
   dispatch(@Param("deviceId") deviceId: string, @Body() body: unknown) {
     return this.commands.dispatch(deviceId, parseBody(dispatchCommandSchema, body));
   }
 
+  @RequirePermission("commands:read")
   @Get()
   findAll(@Param("deviceId") deviceId: string) {
     return this.commands.findAllForDevice(deviceId);

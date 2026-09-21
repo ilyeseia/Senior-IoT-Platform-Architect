@@ -1,4 +1,5 @@
 import { BadRequestException, Body, Controller, Get, NotFoundException, Param, Put } from "@nestjs/common";
+import { RequirePermission } from "../platform";
 import { DevicesService } from "../devices";
 import { TwinService } from "./twin.service";
 
@@ -9,12 +10,14 @@ export class TwinController {
     private readonly twin: TwinService,
   ) {}
 
+  @RequirePermission("twin:read")
   @Get()
   async get(@Param("id") id: string) {
     await this.assertDeviceExists(id);
     return this.twin.getShadow(id);
   }
 
+  @RequirePermission("twin:write")
   @Put("desired")
   async setDesired(@Param("id") id: string, @Body() body: unknown) {
     await this.assertDeviceExists(id);

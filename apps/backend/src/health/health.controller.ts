@@ -1,7 +1,7 @@
 import { Controller, Get, ServiceUnavailableException } from "@nestjs/common";
 import { InjectDataSource } from "@nestjs/typeorm";
 import { DataSource } from "typeorm";
-import { Public } from "../identity";
+import { Public } from "../platform";
 import { MqttService } from "../mqtt";
 
 const DB_CHECK_TIMEOUT_MS = 2_000;

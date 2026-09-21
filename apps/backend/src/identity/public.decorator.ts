@@ -1,6 +1,2 @@
-import { SetMetadata } from "@nestjs/common";
-
-export const IS_PUBLIC_KEY = "isPublic";
-
-/** Opts a route out of the global JwtAuthGuard (see jwt-auth.guard.ts). */
-export const Public = () => SetMetadata(IS_PUBLIC_KEY, true);
+/** Kept for the identity module's own files; the decorators themselves live in the platform kernel. */
+export { Public, IS_PUBLIC_KEY } from "../platform";

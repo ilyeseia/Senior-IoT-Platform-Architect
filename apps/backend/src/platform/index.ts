@@ -16,6 +16,12 @@ export type {
   DeviceOfflinePayload,
   CommandCreatedPayload,
   CommandCompletedPayload,
+  UserCreatedPayload,
+  UserUpdatedPayload,
+  PasswordChangedPayload,
+  LoginSucceededPayload,
+  LoginLockedPayload,
+  PrivilegedExecutedPayload,
   TelemetrySamplePayload,
   TelemetryUpdatedPayload,
   StateChangedPayload,
@@ -29,3 +35,6 @@ export { CorrelationMiddleware } from "./context/correlation.middleware";
 export { ApiExceptionFilter, errorCodeForStatus, normalizeException } from "./http/api-exception.filter";
 export type { ApiErrorBody } from "./http/api-exception.filter";
 export { ApiVersionMiddleware } from "./http/api-version.middleware";
+export { PERMISSIONS, ROLES, ROLE_PERMISSIONS, isRole, permissionsFor, roleHasPermission } from "./auth/permissions";
+export type { Permission, Role } from "./auth/permissions";
+export { Public, RequirePermission, AnyAuthenticated, IS_PUBLIC_KEY, PERMISSION_KEY, ANY_AUTHENTICATED_KEY } from "./auth/decorators";

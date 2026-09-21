@@ -42,9 +42,15 @@ export class LoginThrottle {
     }
   }
 
-  recordFailure(email: string, address: string): void {
-    this.push(this.byAccount, normalize(email));
-    this.push(this.byAddress, address);
+  /**
+   * Counts a failed attempt. Returns which limits this very failure reached, so the caller can
+   * report a lockout once (when it starts) instead of once per further attempt.
+   */
+  recordFailure(email: string, address: string): { account: boolean; address: boolean } {
+    return {
+      account: this.push(this.byAccount, normalize(email)) === MAX_FAILURES_PER_ACCOUNT,
+      address: this.push(this.byAddress, address) === MAX_FAILURES_PER_ADDRESS,
+    };
   }
 
   recordSuccess(email: string): void {
@@ -60,13 +66,15 @@ export class LoginThrottle {
     return window.failures[0] + LOGIN_WINDOW_MS - this.now();
   }
 
-  private push(map: Map<string, Window>, key: string): void {
+  /** Adds a failure and returns how many are now inside the window. */
+  private push(map: Map<string, Window>, key: string): number {
     const window = this.prune(map, key) ?? { failures: [] };
     window.failures.push(this.now());
     map.set(key, window);
     if (map.size > MAX_TRACKED_KEYS) {
       this.evictExpired(map);
     }
+    return window.failures.length;
   }
 
   private prune(map: Map<string, Window>, key: string): Window | undefined {

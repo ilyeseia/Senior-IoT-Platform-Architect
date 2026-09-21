@@ -1,4 +1,5 @@
 import { Controller, Get, Header } from "@nestjs/common";
+import { RequirePermission } from "../platform";
 import { MetricsService } from "./metrics.service";
 
 /**
@@ -11,6 +12,7 @@ export class MetricsController {
   constructor(private readonly metrics: MetricsService) {}
 
   // Nest sends a returned string as text/html; scrapers expect the Prometheus text exposition format.
+  @RequirePermission("metrics:read")
   @Get()
   @Header("Content-Type", "text/plain; version=0.0.4; charset=utf-8")
   @Header("Cache-Control", "no-store")

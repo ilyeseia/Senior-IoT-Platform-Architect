@@ -8,6 +8,8 @@ import { ADMIN_BOOTSTRAP_TOKEN, IdentityService } from "./identity.service";
 import { LoginThrottle } from "./login-throttle";
 import { IdentityController } from "./identity.controller";
 import { JwtAuthGuard } from "./jwt-auth.guard";
+import { PermissionsGuard } from "./permissions.guard";
+import { UsersController } from "./users.controller";
 import type { Env } from "../config/env.validation";
 
 @Module({
@@ -21,7 +23,7 @@ import type { Env } from "../config/env.validation";
       }),
     }),
   ],
-  controllers: [IdentityController],
+  controllers: [IdentityController, UsersController],
   providers: [
     IdentityService,
     LoginThrottle,
@@ -30,7 +32,9 @@ import type { Env } from "../config/env.validation";
       inject: [ConfigService],
       useFactory: (config: ConfigService<Env, true>) => config.get("ADMIN_BOOTSTRAP_TOKEN", { infer: true }),
     },
+    // Order matters: authentication (signature) first, then authorization (live account + permission).
     { provide: APP_GUARD, useClass: JwtAuthGuard },
+    { provide: APP_GUARD, useClass: PermissionsGuard },
   ],
   exports: [IdentityService],
 })

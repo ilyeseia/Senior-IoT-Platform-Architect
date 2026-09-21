@@ -22,6 +22,18 @@ export const EventTypes = {
   DEVICE_TELEMETRY_UPDATED: "device.telemetry.updated",
   /** Twin: an operator changed a device's desired state. */
   DEVICE_STATE_CHANGED: "device.state.changed",
+  /** Identity: a user account was created. */
+  SECURITY_USER_CREATED: "security.user.created",
+  /** Identity: role or enabled/disabled state changed. */
+  SECURITY_USER_UPDATED: "security.user.updated",
+  /** Identity: a password was changed or reset (existing tokens are revoked). */
+  SECURITY_PASSWORD_CHANGED: "security.password.changed",
+  /** Identity: a login succeeded. */
+  SECURITY_LOGIN_SUCCEEDED: "security.login.succeeded",
+  /** Identity: an account or address hit the failed-login limit and is now locked out. Emitted once per lockout, not per failure. */
+  SECURITY_LOGIN_LOCKED: "security.login.locked",
+  /** Provisioning: a privileged (platform_exec) operation was dispatched to a device. */
+  SECURITY_PRIVILEGED_EXECUTED: "security.privileged.executed",
 } as const;
 
 export type EventType = (typeof EventTypes)[keyof typeof EventTypes];
@@ -54,6 +66,48 @@ export interface CommandCompletedPayload {
   status: "succeeded" | "failed" | "rejected" | "timed_out";
   ok: boolean;
   durationMs: number;
+}
+
+export interface UserCreatedPayload {
+  userId: string;
+  email: string;
+  role: string;
+  actor: string | null;
+}
+
+export interface UserUpdatedPayload {
+  userId: string;
+  email: string;
+  changes: { role?: { from: string; to: string }; disabled?: boolean };
+  actor: string | null;
+}
+
+export interface PasswordChangedPayload {
+  userId: string;
+  email: string;
+  /** "self" for a change with the current password, "admin" for a reset. */
+  by: "self" | "admin";
+  actor: string | null;
+}
+
+export interface LoginSucceededPayload {
+  userId: string;
+  email: string;
+  address: string;
+}
+
+export interface LoginLockedPayload {
+  /** What reached its limit. */
+  scope: "account" | "address";
+  email: string;
+  address: string;
+}
+
+export interface PrivilegedExecutedPayload {
+  commandId: string;
+  capability: string;
+  actor: string | null;
+  status: string;
 }
 
 export interface TelemetrySamplePayload {
