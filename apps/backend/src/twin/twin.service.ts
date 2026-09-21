@@ -1,10 +1,15 @@
-import { Inject, Injectable } from "@nestjs/common";
+import { Inject, Injectable, OnModuleInit } from "@nestjs/common";
 import { InjectRepository } from "@nestjs/typeorm";
 import { Repository } from "typeorm";
 import { DeviceShadow } from "./device-shadow.entity";
-import type { ExtractedSample } from "../telemetry/telemetry.service";
 import { EVENT_BUS, EventTypes, createEvent } from "../platform";
-import type { EventBus, StateChangedPayload } from "../platform";
+import type { DomainEvent, EventBus, StateChangedPayload, TelemetryUpdatedPayload } from "../platform";
+
+/** One scalar reading to fold into `reported` (same shape as the telemetry event payload). */
+export interface ReportedSample {
+  metric: string;
+  value: number | boolean;
+}
 
 export interface ShadowView {
   deviceId: string;
@@ -26,11 +31,25 @@ const EMPTY_SHADOW: Omit<ShadowView, "deviceId" | "drift" | "inSync"> = {
 };
 
 @Injectable()
-export class TwinService {
+export class TwinService implements OnModuleInit {
   constructor(
     @InjectRepository(DeviceShadow) private readonly repo: Repository<DeviceShadow>,
     @Inject(EVENT_BUS) private readonly bus: EventBus,
   ) {}
+
+  onModuleInit(): void {
+    // `reported` is fed by telemetry events; the twin does not know or import the telemetry module.
+    this.bus.subscribe(EventTypes.DEVICE_TELEMETRY_UPDATED, (event) => this.onTelemetryUpdated(event), {
+      name: "twin.reported",
+    });
+  }
+
+  private async onTelemetryUpdated(event: DomainEvent): Promise<void> {
+    const { samples } = event.payload as TelemetryUpdatedPayload;
+    if (event.device_id) {
+      await this.mergeReported(event.device_id, samples);
+    }
+  }
 
   /** Never 404s — a device with no shadow row yet just has an empty, in-sync twin. */
   async getShadow(deviceId: string): Promise<ShadowView> {
@@ -73,13 +92,13 @@ export class TwinService {
    * `reported` state, per §18's "reported comes from capability-call
    * results" design. A no-op if there's nothing to merge (empty poll).
    */
-  async mergeReported(deviceId: string, samples: ExtractedSample[]): Promise<void> {
+  async mergeReported(deviceId: string, samples: ReportedSample[]): Promise<void> {
     if (samples.length === 0) {
       return;
     }
     const row = await this.findOrCreate(deviceId);
     for (const sample of samples) {
-      row.reported[sample.metric] = sample.valueNumeric ?? sample.valueBool;
+      row.reported[sample.metric] = sample.value;
     }
     row.reportedVersion += 1;
     await this.repo.save(row);

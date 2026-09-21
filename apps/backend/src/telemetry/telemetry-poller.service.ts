@@ -1,12 +1,15 @@
 import { Inject, Injectable, Logger, OnModuleDestroy, OnModuleInit } from "@nestjs/common";
 import { ConfigService } from "@nestjs/config";
-import { CommandsService } from "../commands/commands.service";
-import { DevicesService } from "../devices/devices.service";
+import { CommandsService } from "../commands";
+import { DevicesService } from "../devices";
 import { TelemetryService, extractSamples } from "./telemetry.service";
-import { TwinService } from "../twin/twin.service";
 import { EVENT_BUS, EventTypes, createEvent } from "../platform";
-import type { EventBus, TelemetryUpdatedPayload } from "../platform";
+import type { EventBus, TelemetrySamplePayload, TelemetryUpdatedPayload } from "../platform";
 import type { Env } from "../config/env.validation";
+
+function toPayloadSamples(samples: ReturnType<typeof extractSamples>): TelemetrySamplePayload[] {
+  return samples.map((s) => ({ metric: s.metric, value: (s.valueNumeric ?? s.valueBool) as number | boolean }));
+}
 
 const DEFAULT_POLL_INTERVAL_MS = 60_000;
 const POLL_COMMAND_TIMEOUT_MS = 8_000;
@@ -47,7 +50,6 @@ export class TelemetryPollerService implements OnModuleInit, OnModuleDestroy {
     private readonly devices: DevicesService,
     private readonly commands: CommandsService,
     private readonly telemetry: TelemetryService,
-    private readonly twin: TwinService,
     @Inject(EVENT_BUS) private readonly bus: EventBus,
   ) {}
 
@@ -98,17 +100,15 @@ export class TelemetryPollerService implements OnModuleInit, OnModuleDestroy {
         return;
       }
       const count = await this.telemetry.recordCapabilityResult(deviceId, capability, result.result);
-      // Digital Twin (ARCHITECTURE-EVOLUTION.md §18): the same extracted
-      // scalar fields become the twin's `reported` state — one extraction
-      // source, two consumers (time-series + latest-value snapshot).
-      await this.twin.mergeReported(deviceId, extractSamples(result.result));
+      // One extraction, published once: the twin (and any future consumer — alerts, automation)
+      // subscribes to this event instead of being called from here.
       if (count > 0) {
         this.bus.publish(
           createEvent<TelemetryUpdatedPayload>({
             type: EventTypes.DEVICE_TELEMETRY_UPDATED,
             source: "module:telemetry",
             deviceId,
-            payload: { source: capability, samples: count },
+            payload: { source: capability, count, samples: toPayloadSamples(extractSamples(result.result)) },
           }),
         );
       }

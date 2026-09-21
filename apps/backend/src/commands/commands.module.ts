@@ -4,8 +4,8 @@ import { Command } from "./command.entity";
 import { CommandResult } from "./command-result.entity";
 import { CommandsService } from "./commands.service";
 import { CommandsController } from "./commands.controller";
-import { MqttModule } from "../mqtt/mqtt.module";
-import { DevicesModule } from "../devices/devices.module";
+import { MqttModule } from "../mqtt";
+import { DevicesModule } from "../devices";
 
 @Module({
   imports: [TypeOrmModule.forFeature([Command, CommandResult]), MqttModule, DevicesModule],

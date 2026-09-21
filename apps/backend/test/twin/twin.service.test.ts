@@ -1,6 +1,7 @@
 import { describe, expect, it, beforeEach } from "vitest";
 import type { Repository } from "typeorm";
 import { RecordingEventBus } from "../helpers/recording-bus";
+import { createEvent } from "../../src/platform";
 import { TwinService } from "../../src/twin/twin.service";
 import { DeviceShadow } from "../../src/twin/device-shadow.entity";
 
@@ -65,8 +66,8 @@ describe("TwinService", () => {
 
   it("mergeReported writes numeric and boolean samples as plain values and bumps reportedVersion", async () => {
     await service.mergeReported("dev3", [
-      { metric: "sampling_interval", valueNumeric: 30, valueBool: null },
-      { metric: "pump", valueNumeric: null, valueBool: false },
+      { metric: "sampling_interval", value: 30 },
+      { metric: "pump", value: false },
     ]);
     const shadow = await service.getShadow("dev3");
     expect(shadow.reported).toEqual({ sampling_interval: 30, pump: false });
@@ -76,9 +77,9 @@ describe("TwinService", () => {
   it("detects drift only on keys present in desired that differ from reported", async () => {
     await service.setDesired("dev4", { sampling_interval: 30, pump: true });
     await service.mergeReported("dev4", [
-      { metric: "sampling_interval", valueNumeric: 30, valueBool: null },
-      { metric: "pump", valueNumeric: null, valueBool: false },
-      { metric: "unrelated_metric", valueNumeric: 99, valueBool: null },
+      { metric: "sampling_interval", value: 30 },
+      { metric: "pump", value: false },
+      { metric: "unrelated_metric", value: 99 },
     ]);
 
     const shadow = await service.getShadow("dev4");
@@ -88,10 +89,10 @@ describe("TwinService", () => {
 
   it("is in sync once reported catches up to desired", async () => {
     await service.setDesired("dev5", { pump: true });
-    await service.mergeReported("dev5", [{ metric: "pump", valueNumeric: null, valueBool: false }]);
+    await service.mergeReported("dev5", [{ metric: "pump", value: false }]);
     expect((await service.getShadow("dev5")).inSync).toBe(false);
 
-    await service.mergeReported("dev5", [{ metric: "pump", valueNumeric: null, valueBool: true }]);
+    await service.mergeReported("dev5", [{ metric: "pump", value: true }]);
     const shadow = await service.getShadow("dev5");
     expect(shadow.inSync).toBe(true);
     expect(shadow.drift).toEqual([]);
@@ -105,5 +106,29 @@ describe("TwinService", () => {
       source: "module:twin",
       payload: { changed: { sampling_interval: 30 }, desiredVersion: 1, drift: view.drift },
     });
+  });
+
+  it("folds telemetry events into reported state via the bus (no dependency on the telemetry module)", async () => {
+    service.onModuleInit();
+    const sub = bus.subscriptions.find((s) => s.pattern === "device.telemetry.updated");
+    expect(sub).toBeDefined();
+    await sub!.handler(
+      createEvent({
+        type: "device.telemetry.updated",
+        source: "module:telemetry",
+        deviceId: "dev6",
+        payload: { source: "mqtt_status", count: 2, samples: [{ metric: "connected", value: true }, { metric: "qos", value: 1 }] },
+      }),
+    );
+    const shadow = await service.getShadow("dev6");
+    expect(shadow.reported).toEqual({ connected: true, qos: 1 });
+    expect(shadow.reportedVersion).toBe(1);
+  });
+
+  it("ignores a telemetry event that has no device id", async () => {
+    service.onModuleInit();
+    const sub = bus.subscriptions.find((s) => s.pattern === "device.telemetry.updated")!;
+    await sub.handler(createEvent({ type: "device.telemetry.updated", source: "m", payload: { source: "x", count: 0, samples: [] } }));
+    expect((await service.getShadow("nobody")).reportedVersion).toBe(0);
   });
 });

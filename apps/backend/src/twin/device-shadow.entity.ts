@@ -1,5 +1,5 @@
 import { Column, Entity, JoinColumn, OneToOne, PrimaryColumn, UpdateDateColumn } from "typeorm";
-import { Device } from "../devices/device.entity";
+import { Device } from "../devices";
 
 /**
  * Digital Twin / Device Shadow (ARCHITECTURE-EVOLUTION.md §18). `desired` and

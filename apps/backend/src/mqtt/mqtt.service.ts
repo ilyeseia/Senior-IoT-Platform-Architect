@@ -3,7 +3,7 @@ import { ConfigService } from "@nestjs/config";
 import mqtt, { MqttClient } from "mqtt";
 import { randomUUID } from "crypto";
 import { CommandEnvelope, parseResponseEnvelope, parseStatusEnvelope, ResponseEnvelope } from "@esp-claw/protocol";
-import { TopicService } from "../esp-claw/topic.service";
+import { TopicService } from "../esp-claw";
 import { EVENT_BUS, EventTypes, createEvent } from "../platform";
 import type { EventBus, PresenceReportedPayload } from "../platform";
 import type { Env } from "../config/env.validation";

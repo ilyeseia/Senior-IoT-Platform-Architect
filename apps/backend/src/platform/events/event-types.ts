@@ -56,9 +56,17 @@ export interface CommandCompletedPayload {
   durationMs: number;
 }
 
+export interface TelemetrySamplePayload {
+  metric: string;
+  /** A number or boolean — the only value types telemetry stores. */
+  value: number | boolean;
+}
+
 export interface TelemetryUpdatedPayload {
+  /** The capability the samples were extracted from, e.g. "mqtt_status". */
   source: string;
-  samples: number;
+  count: number;
+  samples: TelemetrySamplePayload[];
 }
 
 export interface StateChangedPayload {

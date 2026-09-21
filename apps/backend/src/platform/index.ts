@@ -16,6 +16,7 @@ export type {
   DeviceOfflinePayload,
   CommandCreatedPayload,
   CommandCompletedPayload,
+  TelemetrySamplePayload,
   TelemetryUpdatedPayload,
   StateChangedPayload,
 } from "./events/event-types";

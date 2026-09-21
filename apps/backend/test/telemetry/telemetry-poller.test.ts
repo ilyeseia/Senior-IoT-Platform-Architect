@@ -4,7 +4,6 @@ import { TelemetryPollerService } from "../../src/telemetry/telemetry-poller.ser
 import type { DevicesService } from "../../src/devices/devices.service";
 import type { CommandsService } from "../../src/commands/commands.service";
 import type { TelemetryService } from "../../src/telemetry/telemetry.service";
-import type { TwinService } from "../../src/twin/twin.service";
 import { RecordingEventBus } from "../helpers/recording-bus";
 import type { Env } from "../../src/config/env.validation";
 
@@ -18,7 +17,6 @@ function make(
   };
   const commands = { dispatch: vi.fn(async (_id: string, _input: { name: string }) => ({ result: dispatchResult })) };
   const telemetry = { recordCapabilityResult: vi.fn(async () => 1) };
-  const twin = { mergeReported: vi.fn(async () => undefined) };
   const bus = new RecordingEventBus();
   const config = { get: () => undefined } as unknown as ConfigService<Env, true>;
   const poller = new TelemetryPollerService(
@@ -26,10 +24,9 @@ function make(
     devices as unknown as DevicesService,
     commands as unknown as CommandsService,
     telemetry as unknown as TelemetryService,
-    twin as unknown as TwinService,
     bus,
   );
-  return { poller, devices, commands, telemetry, twin, bus };
+  return { poller, devices, commands, telemetry, bus };
 }
 
 describe("TelemetryPollerService.pollOnce", () => {
@@ -50,14 +47,6 @@ describe("TelemetryPollerService.pollOnce", () => {
     expect(bad.telemetry.recordCapabilityResult).not.toHaveBeenCalled();
   });
 
-  it("also merges the extracted samples into the digital twin's reported state", async () => {
-    const { poller, twin } = make({ d1: ["cap_mqtt"] });
-    await poller.pollOnce();
-    expect(twin.mergeReported).toHaveBeenCalledWith("d1", [
-      { metric: "connected", valueNumeric: null, valueBool: true },
-    ]);
-  });
-
   it("publishes device.telemetry.updated with the sample count", async () => {
     const { poller, bus } = make({ d1: ["cap_mqtt"] });
     await poller.pollOnce();
@@ -65,7 +54,7 @@ describe("TelemetryPollerService.pollOnce", () => {
     expect(bus.ofType("device.telemetry.updated")[0]).toMatchObject({
       device_id: "d1",
       source: "module:telemetry",
-      payload: { source: "mqtt_status", samples: 1 },
+      payload: { source: "mqtt_status", count: 1, samples: [{ metric: "connected", value: true }] },
     });
   });
 

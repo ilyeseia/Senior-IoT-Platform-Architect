@@ -1,5 +1,5 @@
 import { Controller, Get } from "@nestjs/common";
-import { Public } from "../identity/public.decorator";
+import { Public } from "../identity";
 
 interface HealthResponse {
   status: "ok";

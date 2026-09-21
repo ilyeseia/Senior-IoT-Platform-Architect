@@ -1,5 +1,5 @@
 import { BadRequestException, Body, Controller, Get, NotFoundException, Param, Put } from "@nestjs/common";
-import { DevicesService } from "../devices/devices.service";
+import { DevicesService } from "../devices";
 import { TwinService } from "./twin.service";
 
 @Controller("devices/:id/shadow")

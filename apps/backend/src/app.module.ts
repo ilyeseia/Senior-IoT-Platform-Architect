@@ -1,15 +1,15 @@
 import { MiddlewareConsumer, Module, NestModule } from "@nestjs/common";
 import { ConfigModule } from "@nestjs/config";
 import { validateEnv } from "./config/env.validation";
-import { HealthModule } from "./health/health.module";
-import { EspClawModule } from "./esp-claw/esp-claw.module";
-import { MqttModule } from "./mqtt/mqtt.module";
-import { DatabaseModule } from "./database/database.module";
-import { DevicesModule } from "./devices/devices.module";
-import { CommandsModule } from "./commands/commands.module";
-import { TelemetryModule } from "./telemetry/telemetry.module";
-import { IdentityModule } from "./identity/identity.module";
-import { TwinModule } from "./twin/twin.module";
+import { HealthModule } from "./health";
+import { EspClawModule } from "./esp-claw";
+import { MqttModule } from "./mqtt";
+import { DatabaseModule } from "./database";
+import { DevicesModule } from "./devices";
+import { CommandsModule } from "./commands";
+import { TelemetryModule } from "./telemetry";
+import { IdentityModule } from "./identity";
+import { TwinModule } from "./twin";
 import { AuditModule } from "./audit";
 import { CorrelationMiddleware, EventsModule } from "./platform";
 

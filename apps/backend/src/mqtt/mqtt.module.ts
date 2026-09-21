@@ -1,5 +1,5 @@
 import { Module } from "@nestjs/common";
-import { EspClawModule } from "../esp-claw/esp-claw.module";
+import { EspClawModule } from "../esp-claw";
 import { MqttService } from "./mqtt.service";
 
 /**

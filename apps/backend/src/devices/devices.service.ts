@@ -4,8 +4,8 @@ import { In, Not, Repository } from "typeorm";
 import { capabilityGroupIds } from "@esp-claw/protocol";
 import { Device } from "./device.entity";
 import { DeviceCapability } from "./device-capability.entity";
-import { LocalApiClient } from "../esp-claw/local-api-client";
-import { LocalTargetError } from "../esp-claw/local-target";
+import { LocalApiClient } from "../esp-claw";
+import { LocalTargetError } from "../esp-claw";
 import { EVENT_BUS, EventTypes, createEvent } from "../platform";
 import type {
   DeviceOnlinePayload,

@@ -1,5 +1,5 @@
 import { Column, CreateDateColumn, Entity, Index, JoinColumn, ManyToOne, PrimaryColumn } from "typeorm";
-import { Device } from "../devices/device.entity";
+import { Device } from "../devices";
 
 /**
  * "id" here is the SAME id used as the real command envelope's "id" field
