@@ -20,7 +20,7 @@ Firmware-side findings and fixes: [FIRMWARE-HARDENING.md](docs/architecture/FIRM
 | — | Identity (JWT, first-admin bootstrap), Digital Twin v1 | done |
 | Stage 0 | Stabilization (audit B1, B3, B4, B7, B8, B12, B13) | done |
 | Stage 1 | EventBus + envelope, append-only audit log, enforced module boundaries, `/v1`, error envelope, health/metrics, JSON logs ([STAGE1](docs/architecture/STAGE1-EVENTS-AND-BOUNDARIES.md)) | done, applied to the dev DB |
-| Stage 2 | RBAC + immediate session revocation + user management; `platform_exec` token issuer and privileged operations ([STAGE2](docs/architecture/STAGE2-RBAC-AND-PROVISIONING.md)) | done in code; not run against a real device; migration 0009 not on the dev DB |
+| Stage 2 | RBAC + immediate session revocation + user management; `platform_exec` token issuer and privileged operations ([STAGE2](docs/architecture/STAGE2-RBAC-AND-PROVISIONING.md)) | done in code, migration 0009 applied to the dev DB; not yet run against a real device (runbook + probe: [DEVICE-TEST-RUNBOOK](docs/architecture/DEVICE-TEST-RUNBOOK.md)) |
 | Stage 3+ | organizations (needs a tenancy decision), per-device broker credentials (needs CloudAMQP confirmation), twin reconciliation, OTA module, agents | proposed |
 
 ## Development

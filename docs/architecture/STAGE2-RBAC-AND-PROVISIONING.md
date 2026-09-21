@@ -85,7 +85,7 @@ The secret is never returned by any HTTP endpoint. The `cap_platform` group is o
 
 ## 3. Migration
 `0009` adds `users.disabledAt` (nullable) and `users.tokenVersion` (default 0). Additive; existing users stay enabled at
-version 0. Rollback: `down()` drops both columns. **Not yet applied to the shared dev database.**
+version 0. Rollback: `down()` drops both columns. **Applied to the shared dev database on 2026-09-21** (`migration:run`; `users` had 0 rows; columns verified).
 
 ## 4. Verification
 | Check | Result |
@@ -96,7 +96,7 @@ version 0. Rollback: `down()` drops both columns. **Not yet applied to the share
 | Token vs. the device logic | a line-by-line **port of `cap_platform_exec_execute`** (test helper) accepts every allowed target and refuses tampering, wrong secret/device, expiry, replay, oversize, unprovisioned; end-to-end (controller → `CommandsService` → the port) proves what is stored/announced contains neither the token nor a password |
 | Real Nest app over HTTP (compiled guards/controllers, in-memory user repository) | viewer/operator/admin see 200/201/403 as specified; 403/401/409/400 envelopes; a live token is refused right after demotion, disabling, and a password change; demoting the only admin → 409 |
 | Migration `0009` in an isolated scratch schema with a pre-existing user | up: row stays `admin`, enabled, version 0; down: columns gone; schema removed |
-| **Not verified** | **a real device**: the token has never been presented to real `cap_platform` firmware from this platform (only to a port of its logic) — do this before relying on it: provision one device, then `POST /devices/:id/privileged {"capability":"list_agents"}`. The firmware changes this depends on (allow-list, larger payload) are compiled but not flashed. Migration `0009` not applied to the dev DB. |
+| **Not verified** | **a real device**: the token has never been presented to real `cap_platform` firmware from this platform (only to a port of its logic) — do this before relying on it: provision one device, then `POST /devices/:id/privileged {"capability":"list_agents"}`. The firmware changes this depends on (allow-list, larger payload) are compiled but not flashed. Migration `0009` is applied on the dev DB. A ready-made probe and runbook exist: `DEVICE-TEST-RUNBOOK.md` (`pnpm run device:probe`). |
 
 ## 5. Not built in this stage (and why)
 * **Organizations / `org_id`.** Needs a tenancy decision first: one default organization, or one per customer; and how a device

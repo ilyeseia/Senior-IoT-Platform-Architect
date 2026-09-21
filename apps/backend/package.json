@@ -8,6 +8,7 @@
     "start:dev": "nest start --watch",
     "test": "vitest run",
     "platform:secret": "ts-node --transpile-only scripts/platform-secret.ts",
+    "device:probe": "ts-node --transpile-only scripts/device-probe.ts",
     "lint": "echo \"(no lint configured yet)\""
   },
   "dependencies": {
