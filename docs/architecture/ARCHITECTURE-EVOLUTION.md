@@ -1,5 +1,10 @@
 # Architecture Evolution — Advanced Audit (Control/Data/Agent/Edge/Observability Planes)
 
+> **Note (2026-09-21):** parts of this document are stale — see
+> [ADVANCED-ARCHITECTURE-AUDIT.md](ADVANCED-ARCHITECTURE-AUDIT.md) §0.2 for the corrections and
+> [STAGE0-STABILIZATION.md](STAGE0-STABILIZATION.md) for what has been fixed since.
+> <!-- SUPERSEDED-NOTE -->
+
 **This is an audit and proposal only. No code changed in this pass.** Per the brief's own rule
 (§30, and rule #38 from the original prompt): every claim about ESP-Claw below was checked against
 the real `esp-claw-2` firmware source in this session, not assumed. Every claim about *this*
