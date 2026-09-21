@@ -31,7 +31,8 @@ const ALLOWED: Record<string, string[]> = {
   commands: ["devices", "mqtt"],
   telemetry: ["devices", "commands"],
   twin: ["devices"],
-  health: ["identity"], // + mqtt/database readiness checks are added with the health endpoints
+  health: ["identity", "mqtt"], // readiness reports broker state
+  observability: ["mqtt"], // metrics observe the platform; nothing depends on observability
 };
 
 const APP_ROOT_FILES = new Set(["app.module.ts", "main.ts"]); // composition root: may import every module's public API

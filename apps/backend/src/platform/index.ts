@@ -26,3 +26,6 @@ export { EventsModule } from "./events/events.module";
 export { InProcessEventBus, matchesPattern } from "./events/in-process-event-bus";
 export type { EventBusStats } from "./events/in-process-event-bus";
 export { CorrelationMiddleware } from "./context/correlation.middleware";
+export { ApiExceptionFilter, errorCodeForStatus, normalizeException } from "./http/api-exception.filter";
+export type { ApiErrorBody } from "./http/api-exception.filter";
+export { ApiVersionMiddleware } from "./http/api-version.middleware";

@@ -505,7 +505,7 @@ destructive migration without a written rollback.
 * **Stage 0 — Stabilize — DONE 2026-09-20, see [STAGE0-STABILIZATION.md](STAGE0-STABILIZATION.md)** (no schema change): B1 (single command id), B2–B4 guards/removals, B7 reaper,
   B8 shutdown hooks, B12; add tests for commands/devices/poller. *Rollback: git revert; no schema change
   except `commands` (additive).*
-* **Stage 1 — Boundaries + events:** module public APIs + lint rule, `EventBus` + envelope + outbox, `/v1`,
+* **Stage 1 — Boundaries + events — DONE 2026-09-21, see [STAGE1-EVENTS-AND-BOUNDARIES.md](STAGE1-EVENTS-AND-BOUNDARIES.md)** (outbox and OpenAPI deliberately deferred, reasons there): module public APIs + lint rule, `EventBus` + envelope + outbox, `/v1`,
   validation, OpenAPI, observability basics. *Additive migrations only.*
 * **Stage 2 — Identity + registry:** users/orgs/RBAC, `org_id` nullable → backfill to a default org →
   `NOT NULL`, `device_tools`, per-device credentials/ACL. *Backfill is reversible (column drop).*

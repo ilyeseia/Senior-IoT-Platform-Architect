@@ -46,6 +46,9 @@ export const envSchema = z
 
     LOCAL_API_ALLOWED_HOSTS: z.string().optional(),
 
+    /** "json" = one JSON object per log line (default in production); "text" = Nest's pretty logs. */
+    LOG_FORMAT: z.enum(["text", "json"]).optional(),
+
     ADMIN_BOOTSTRAP_TOKEN: z.string().min(16, "ADMIN_BOOTSTRAP_TOKEN must be at least 16 characters").optional(),
   })
   .superRefine((env, ctx) => {
