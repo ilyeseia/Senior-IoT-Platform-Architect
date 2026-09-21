@@ -1,5 +1,6 @@
 import { describe, expect, it, beforeEach } from "vitest";
 import type { Repository } from "typeorm";
+import { RecordingEventBus } from "../helpers/recording-bus";
 import { TwinService } from "../../src/twin/twin.service";
 import { DeviceShadow } from "../../src/twin/device-shadow.entity";
 
@@ -20,10 +21,12 @@ function fakeShadowRepo(): Repository<DeviceShadow> {
 describe("TwinService", () => {
   let repo: Repository<DeviceShadow>;
   let service: TwinService;
+  let bus: RecordingEventBus;
 
   beforeEach(() => {
     repo = fakeShadowRepo();
-    service = new TwinService(repo);
+    bus = new RecordingEventBus();
+    service = new TwinService(repo, bus);
   });
 
   it("returns an empty, in-sync shadow for a device with no row yet", async () => {
@@ -92,5 +95,15 @@ describe("TwinService", () => {
     const shadow = await service.getShadow("dev5");
     expect(shadow.inSync).toBe(true);
     expect(shadow.drift).toEqual([]);
+  });
+
+  it("publishes device.state.changed when an operator sets desired state", async () => {
+    const view = await service.setDesired("d1", { sampling_interval: 30 });
+    const [event] = bus.ofType("device.state.changed");
+    expect(event).toMatchObject({
+      device_id: "d1",
+      source: "module:twin",
+      payload: { changed: { sampling_interval: 30 }, desiredVersion: 1, drift: view.drift },
+    });
   });
 });

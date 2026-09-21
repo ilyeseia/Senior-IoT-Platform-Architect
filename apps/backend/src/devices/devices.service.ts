@@ -1,23 +1,36 @@
-import { BadRequestException, Injectable, Logger, NotFoundException } from "@nestjs/common";
+import { BadRequestException, Inject, Injectable, Logger, NotFoundException, OnModuleInit } from "@nestjs/common";
 import { InjectRepository } from "@nestjs/typeorm";
-import { OnEvent } from "@nestjs/event-emitter";
 import { In, Not, Repository } from "typeorm";
 import { capabilityGroupIds } from "@esp-claw/protocol";
 import { Device } from "./device.entity";
 import { DeviceCapability } from "./device-capability.entity";
 import { LocalApiClient } from "../esp-claw/local-api-client";
 import { LocalTargetError } from "../esp-claw/local-target";
-import type { DeviceStatusEvent } from "../mqtt/mqtt.events";
+import { EVENT_BUS, EventTypes, createEvent } from "../platform";
+import type {
+  DeviceOnlinePayload,
+  DeviceRegisteredPayload,
+  DomainEvent,
+  EventBus,
+  PresenceReportedPayload,
+} from "../platform";
 
 @Injectable()
-export class DevicesService {
+export class DevicesService implements OnModuleInit {
   private readonly logger = new Logger(DevicesService.name);
 
   constructor(
     @InjectRepository(Device) private readonly repo: Repository<Device>,
     @InjectRepository(DeviceCapability) private readonly capRepo: Repository<DeviceCapability>,
     private readonly localApi: LocalApiClient,
+    @Inject(EVENT_BUS) private readonly bus: EventBus,
   ) {}
+
+  onModuleInit(): void {
+    this.bus.subscribe(EventTypes.DEVICE_PRESENCE_REPORTED, (event) => this.handlePresenceReported(event), {
+      name: "devices.presence",
+    });
+  }
 
   findAll(): Promise<Device[]> {
     return this.repo.find({ order: { firstSeenAt: "ASC" } });
@@ -52,24 +65,47 @@ export class DevicesService {
       return existing;
     }
     this.logger.log(`Auto-registering new device ${id} (baseTopic=${baseTopic})`);
-    return this.repo.save(this.repo.create({ id, baseTopic, online: false, lastSeenAt: null }));
-  }
-
-  private async upsertPresence(id: string, baseTopic: string, online: boolean): Promise<void> {
-    await this.findOrCreate(id, baseTopic);
-    await this.repo.update({ id }, { online, lastSeenAt: new Date() });
+    const created = await this.repo.save(this.repo.create({ id, baseTopic, online: false, lastSeenAt: null }));
+    this.bus.publish(
+      createEvent<DeviceRegisteredPayload>({
+        type: EventTypes.DEVICE_REGISTERED,
+        source: "module:devices",
+        deviceId: id,
+        payload: { baseTopic },
+      }),
+    );
+    return created;
   }
 
   /**
-   * Listens for the event MqttService emits on every real status message
-   * (PHASE1-ANALYSIS.md §C) — decoupled via EventEmitter2 rather than
-   * MqttModule importing DevicesModule directly, so future listeners
-   * (Alerts on offline transitions, Automation, ...) can subscribe to the
-   * same event without MqttService needing to know they exist.
+   * Turns a raw presence observation from the gateway into registry state and lifecycle events
+   * (`device.registered` on first contact, `device.online` / `device.offline` on a real change).
+   * The bus delivers one device's observations in order, so a fast online→offline flap cannot be
+   * applied backwards (audit B6).
    */
-  @OnEvent("device.status")
-  async handleDeviceStatus(event: DeviceStatusEvent): Promise<void> {
-    await this.upsertPresence(event.deviceId, event.baseTopic, event.online);
+  async handlePresenceReported(event: DomainEvent): Promise<void> {
+    const { baseTopic, online } = event.payload as PresenceReportedPayload;
+    const id = event.device_id;
+    if (!id) {
+      return;
+    }
+    const before = await this.repo.findOne({ where: { id } });
+    await this.findOrCreate(id, baseTopic);
+    await this.repo.update({ id }, { online, lastSeenAt: new Date(event.timestamp) });
+
+    const wasOnline = before?.online ?? false;
+    if (wasOnline !== online) {
+      this.bus.publish(
+        createEvent<DeviceOnlinePayload>({
+          type: online ? EventTypes.DEVICE_ONLINE : EventTypes.DEVICE_OFFLINE,
+          source: "module:devices",
+          deviceId: id,
+          causationId: event.event_id,
+          correlationId: event.correlation_id,
+          payload: { previous: wasOnline },
+        }),
+      );
+    }
   }
 
   listCapabilities(id: string): Promise<DeviceCapability[]> {

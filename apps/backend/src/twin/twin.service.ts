@@ -1,8 +1,10 @@
-import { Injectable } from "@nestjs/common";
+import { Inject, Injectable } from "@nestjs/common";
 import { InjectRepository } from "@nestjs/typeorm";
 import { Repository } from "typeorm";
 import { DeviceShadow } from "./device-shadow.entity";
 import type { ExtractedSample } from "../telemetry/telemetry.service";
+import { EVENT_BUS, EventTypes, createEvent } from "../platform";
+import type { EventBus, StateChangedPayload } from "../platform";
 
 export interface ShadowView {
   deviceId: string;
@@ -25,7 +27,10 @@ const EMPTY_SHADOW: Omit<ShadowView, "deviceId" | "drift" | "inSync"> = {
 
 @Injectable()
 export class TwinService {
-  constructor(@InjectRepository(DeviceShadow) private readonly repo: Repository<DeviceShadow>) {}
+  constructor(
+    @InjectRepository(DeviceShadow) private readonly repo: Repository<DeviceShadow>,
+    @Inject(EVENT_BUS) private readonly bus: EventBus,
+  ) {}
 
   /** Never 404s — a device with no shadow row yet just has an empty, in-sync twin. */
   async getShadow(deviceId: string): Promise<ShadowView> {
@@ -49,7 +54,16 @@ export class TwinService {
     row.desired = { ...row.desired, ...patch };
     row.desiredVersion += 1;
     await this.repo.save(row);
-    return { ...row, ...computeDrift(row.desired, row.reported) };
+    const view = { ...row, ...computeDrift(row.desired, row.reported) };
+    this.bus.publish(
+      createEvent<StateChangedPayload>({
+        type: EventTypes.DEVICE_STATE_CHANGED,
+        source: "module:twin",
+        deviceId,
+        payload: { changed: patch, desiredVersion: row.desiredVersion, drift: view.drift },
+      }),
+    );
+    return view;
   }
 
   /**

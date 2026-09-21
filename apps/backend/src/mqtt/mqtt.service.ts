@@ -1,11 +1,11 @@
-import { Injectable, Logger, OnModuleDestroy, OnModuleInit } from "@nestjs/common";
+import { Inject, Injectable, Logger, OnModuleDestroy, OnModuleInit } from "@nestjs/common";
 import { ConfigService } from "@nestjs/config";
-import { EventEmitter2 } from "@nestjs/event-emitter";
 import mqtt, { MqttClient } from "mqtt";
 import { randomUUID } from "crypto";
 import { CommandEnvelope, parseResponseEnvelope, parseStatusEnvelope, ResponseEnvelope } from "@esp-claw/protocol";
 import { TopicService } from "../esp-claw/topic.service";
-import { DEVICE_STATUS_EVENT, DeviceStatusEvent } from "./mqtt.events";
+import { EVENT_BUS, EventTypes, createEvent } from "../platform";
+import type { EventBus, PresenceReportedPayload } from "../platform";
 import type { Env } from "../config/env.validation";
 
 export interface DevicePresence {
@@ -54,7 +54,7 @@ export class MqttService implements OnModuleInit, OnModuleDestroy {
   constructor(
     private readonly config: ConfigService<Env, true>,
     private readonly topics: TopicService,
-    private readonly events: EventEmitter2,
+    @Inject(EVENT_BUS) private readonly bus: EventBus,
   ) {
     this.mqttUrl = this.config.get("MQTT_URL", { infer: true });
   }
@@ -214,10 +214,16 @@ export class MqttService implements OnModuleInit, OnModuleDestroy {
         online: status.online,
         lastSeenAt: new Date().toISOString(),
       });
-      // Decoupled from DevicesService on purpose (PHASE5-DATABASE.md) — this
-      // module doesn't know or care who's listening.
-      const event: DeviceStatusEvent = { deviceId, baseTopic, online: status.online };
-      this.events.emit(DEVICE_STATUS_EVENT, event);
+      // The gateway only reports what it observed; it neither knows nor cares who consumes it
+      // (the registry turns observations into online/offline transitions).
+      this.bus.publish(
+        createEvent<PresenceReportedPayload>({
+          type: EventTypes.DEVICE_PRESENCE_REPORTED,
+          source: "gateway:mqtt",
+          deviceId,
+          payload: { baseTopic, online: status.online },
+        }),
+      );
     } catch {
       this.logger.debug(`Ignoring malformed status envelope for device ${deviceId}`);
     }

@@ -1,10 +1,12 @@
-import { Injectable, Logger, NotFoundException, OnModuleInit } from "@nestjs/common";
+import { Inject, Injectable, Logger, NotFoundException, OnModuleInit } from "@nestjs/common";
 import { InjectRepository } from "@nestjs/typeorm";
 import { randomUUID } from "crypto";
 import { Repository } from "typeorm";
 import { ResponseEnvelope } from "@esp-claw/protocol";
 import { MqttService } from "../mqtt/mqtt.service";
 import { DevicesService } from "../devices/devices.service";
+import { EVENT_BUS, EventTypes, createEvent, currentContext } from "../platform";
+import type { CommandCompletedPayload, CommandCreatedPayload, EventBus } from "../platform";
 import { Command, CommandStatus } from "./command.entity";
 import { CommandResult } from "./command-result.entity";
 
@@ -39,6 +41,7 @@ export class CommandsService implements OnModuleInit {
     @InjectRepository(CommandResult) private readonly results: Repository<CommandResult>,
     private readonly mqtt: MqttService,
     private readonly devices: DevicesService,
+    @Inject(EVENT_BUS) private readonly bus: EventBus,
   ) {}
 
   /**
@@ -74,6 +77,10 @@ export class CommandsService implements OnModuleInit {
     }
 
     const id = randomUUID();
+    const startedAtMs = Date.now();
+    // Inside an API request this is the request's id; for internal callers (the telemetry poller)
+    // there is no request, so the command gets its own — either way both of its events share it.
+    const correlationId = currentContext()?.correlationId ?? randomUUID();
     const timeoutMs = input.timeoutMs ?? DEFAULT_TIMEOUT_MS;
 
     const command = await this.commands.save(
@@ -84,6 +91,18 @@ export class CommandsService implements OnModuleInit {
         input: input.input ?? {},
         status: "pending",
         timeoutMs,
+        correlationId,
+      }),
+    );
+    // The command id doubles as the causation id of everything this command triggers.
+    this.bus.publish(
+      createEvent<CommandCreatedPayload>({
+        type: EventTypes.DEVICE_COMMAND_CREATED,
+        source: "module:commands",
+        deviceId,
+        causationId: id,
+        correlationId,
+        payload: { commandId: id, name: input.name, timeoutMs },
       }),
     );
 
@@ -96,21 +115,25 @@ export class CommandsService implements OnModuleInit {
         { baseTopic: device.baseTopic, timeoutMs, id },
       );
     } catch (err) {
-      return this.resolveOutcome(command, {
-        id,
-        ok: false,
-        result: (err as Error).message,
-      });
+      return this.resolveOutcome(
+        command,
+        { id, ok: false, result: (err as Error).message },
+        startedAtMs,
+      );
     }
 
-    return this.resolveOutcome(command, response);
+    return this.resolveOutcome(command, response, startedAtMs);
   }
 
   findAllForDevice(deviceId: string): Promise<Command[]> {
     return this.commands.find({ where: { deviceId }, order: { createdAt: "DESC" } });
   }
 
-  private async resolveOutcome(command: Command, response: ResponseEnvelope): Promise<DispatchOutcome> {
+  private async resolveOutcome(
+    command: Command,
+    response: ResponseEnvelope,
+    startedAtMs: number,
+  ): Promise<DispatchOutcome> {
     const status = this.classify(response);
     command.status = status;
     command.resolvedAt = new Date();
@@ -126,6 +149,22 @@ export class CommandsService implements OnModuleInit {
     );
 
     this.logger.log(`Command ${command.id} (${command.name} -> ${command.deviceId}) resolved: ${status}`);
+    this.bus.publish(
+      createEvent<CommandCompletedPayload>({
+        type: EventTypes.DEVICE_COMMAND_COMPLETED,
+        source: "module:commands",
+        deviceId: command.deviceId,
+        causationId: command.id,
+        correlationId: command.correlationId ?? undefined,
+        payload: {
+          commandId: command.id,
+          name: command.name,
+          status: status as CommandCompletedPayload["status"], // classify() only returns terminal statuses
+          ok: response.ok,
+          durationMs: Date.now() - startedAtMs,
+        },
+      }),
+    );
     return { command, result };
   }
 

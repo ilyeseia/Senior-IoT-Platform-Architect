@@ -1,15 +1,14 @@
 import { Module } from "@nestjs/common";
 import { ConfigService } from "@nestjs/config";
 import { TypeOrmModule } from "@nestjs/typeorm";
-import { Device } from "../devices/device.entity";
-import { DeviceCapability } from "../devices/device-capability.entity";
-import { Command } from "../commands/command.entity";
-import { CommandResult } from "../commands/command-result.entity";
-import { TelemetrySample } from "../telemetry/telemetry-sample.entity";
-import { User } from "../identity/user.entity";
-import { DeviceShadow } from "../twin/device-shadow.entity";
 import type { Env } from "../config/env.validation";
 
+/**
+ * Connection only. Each feature module registers the entities it owns through
+ * `TypeOrmModule.forFeature([...])`, and `autoLoadEntities` collects them — so this module knows
+ * nothing about any feature (before Stage 1 it imported every entity, which made the database
+ * module depend on all of them). Migrations stay explicit and reviewable.
+ */
 @Module({
   imports: [
     TypeOrmModule.forRootAsync({
@@ -17,7 +16,7 @@ import type { Env } from "../config/env.validation";
       useFactory: (config: ConfigService<Env, true>) => ({
         type: "postgres" as const,
         url: config.get("DATABASE_URL", { infer: true }),
-        entities: [Device, DeviceCapability, Command, CommandResult, TelemetrySample, User, DeviceShadow],
+        autoLoadEntities: true,
         // Migrations only, never auto-sync — schema changes are explicit,
         // reviewable, and reversible (item 33's reliability spirit applies
         // to schema changes too, not just runtime retries).

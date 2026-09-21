@@ -5,6 +5,7 @@ import { DevicesService } from "../../src/devices/devices.service";
 import { LocalApiClient } from "../../src/esp-claw/local-api-client";
 import type { Device } from "../../src/devices/device.entity";
 import type { DeviceCapability } from "../../src/devices/device-capability.entity";
+import { RecordingEventBus } from "../helpers/recording-bus";
 
 function makeService(device: Partial<Device> | null) {
   const repo = { findOne: vi.fn(async () => device) };
@@ -15,6 +16,7 @@ function makeService(device: Partial<Device> | null) {
     repo as unknown as Repository<Device>,
     capRepo as unknown as Repository<DeviceCapability>,
     localApi,
+    new RecordingEventBus(),
   );
   return { service, fetchCapabilities };
 }

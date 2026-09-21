@@ -1,6 +1,5 @@
-import { Module } from "@nestjs/common";
+import { MiddlewareConsumer, Module, NestModule } from "@nestjs/common";
 import { ConfigModule } from "@nestjs/config";
-import { EventEmitterModule } from "@nestjs/event-emitter";
 import { validateEnv } from "./config/env.validation";
 import { HealthModule } from "./health/health.module";
 import { EspClawModule } from "./esp-claw/esp-claw.module";
@@ -11,6 +10,8 @@ import { CommandsModule } from "./commands/commands.module";
 import { TelemetryModule } from "./telemetry/telemetry.module";
 import { IdentityModule } from "./identity/identity.module";
 import { TwinModule } from "./twin/twin.module";
+import { AuditModule } from "./audit";
+import { CorrelationMiddleware, EventsModule } from "./platform";
 
 @Module({
   imports: [
@@ -18,7 +19,7 @@ import { TwinModule } from "./twin/twin.module";
       isGlobal: true,
       validate: validateEnv,
     }),
-    EventEmitterModule.forRoot(),
+    EventsModule,
     DatabaseModule,
     IdentityModule,
     HealthModule,
@@ -28,6 +29,12 @@ import { TwinModule } from "./twin/twin.module";
     CommandsModule,
     TwinModule,
     TelemetryModule,
+    AuditModule,
   ],
 })
-export class AppModule {}
+export class AppModule implements NestModule {
+  configure(consumer: MiddlewareConsumer): void {
+    // Every request gets a correlation id (and trace ids from `traceparent`) before any handler runs.
+    consumer.apply(CorrelationMiddleware).forRoutes("*");
+  }
+}

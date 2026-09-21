@@ -7,6 +7,8 @@ import type { CommandResult } from "../../src/commands/command-result.entity";
 import type { MqttService } from "../../src/mqtt/mqtt.service";
 import type { DevicesService } from "../../src/devices/devices.service";
 import { dispatchCommandSchema } from "../../src/commands/commands.dto";
+import { RecordingEventBus } from "../helpers/recording-bus";
+import { runWithContext } from "../../src/platform";
 
 type Response = { id: string; ok: boolean; result?: string };
 
@@ -24,13 +26,15 @@ function makeService(opts: { device?: { id: string; baseTopic: string } | null; 
   const mqtt = { sendCommand: vi.fn(opts.sendCommand ?? (async () => ({ id: "x", ok: true, result: "ok" }))) };
   const device = opts.device === undefined ? { id: "dev1", baseTopic: "espclaw/acme" } : opts.device;
   const devices = { findOne: vi.fn(async () => device) };
+  const bus = new RecordingEventBus();
   const service = new CommandsService(
     commandsRepo as unknown as Repository<Command>,
     resultsRepo as unknown as Repository<CommandResult>,
     mqtt as unknown as MqttService,
     devices as unknown as DevicesService,
+    bus,
   );
-  return { service, commandsRepo, resultsRepo, mqtt, devices };
+  return { service, commandsRepo, resultsRepo, mqtt, devices, bus };
 }
 
 describe("CommandsService.dispatch", () => {
@@ -81,6 +85,50 @@ describe("CommandsService.dispatch", () => {
     const { command, result } = await c.service.dispatch("dev1", { name: "n" });
     expect(command.status).toBe("timed_out");
     expect(result.ok).toBe(false);
+  });
+});
+
+describe("CommandsService events", () => {
+  it("publishes created then completed, linked by causation id and correlation id", async () => {
+    const c = makeService({});
+    const { command } = await c.service.dispatch("dev1", { name: "mqtt_status" });
+    const created = c.bus.ofType("device.command.created");
+    const completed = c.bus.ofType("device.command.completed");
+    expect(created).toHaveLength(1);
+    expect(completed).toHaveLength(1);
+    expect(created[0]).toMatchObject({
+      device_id: "dev1",
+      source: "module:commands",
+      causation_id: command.id,
+      payload: { commandId: command.id, name: "mqtt_status" },
+    });
+    expect(completed[0]).toMatchObject({
+      causation_id: command.id,
+      payload: { commandId: command.id, status: "succeeded", ok: true },
+    });
+    expect(completed[0].correlation_id).toBe(created[0].correlation_id);
+    expect(completed[0].payload).toHaveProperty("durationMs");
+  });
+
+  it("stores the request's correlation id on the command and on both events", async () => {
+    const c = makeService({});
+    const { command } = await runWithContext({ correlationId: "req-77", traceId: null, spanId: null }, () =>
+      c.service.dispatch("dev1", { name: "n" }),
+    );
+    expect(command.correlationId).toBe("req-77");
+    expect(c.bus.events.map((e) => e.correlation_id)).toEqual(["req-77", "req-77"]);
+  });
+
+  it("reports a rejected command as rejected in the completion event", async () => {
+    const c = makeService({ sendCommand: async () => ({ id: "i", ok: false, result: "Error: cap 'x' is not exposed to the LLM (reason=local_only)." }) });
+    await c.service.dispatch("dev1", { name: "x" });
+    expect(c.bus.ofType("device.command.completed")[0].payload).toMatchObject({ status: "rejected", ok: false });
+  });
+
+  it("publishes nothing when the device is unknown", async () => {
+    const c = makeService({ device: null });
+    await c.service.dispatch("ghost", { name: "x" }).catch(() => undefined);
+    expect(c.bus.events).toHaveLength(0);
   });
 });
 

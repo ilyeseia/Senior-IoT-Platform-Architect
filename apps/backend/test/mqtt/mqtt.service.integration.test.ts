@@ -3,10 +3,10 @@ import { createServer, type Server, type AddressInfo } from "node:net";
 import Aedes from "aedes";
 import mqtt, { type MqttClient } from "mqtt";
 import type { ConfigService } from "@nestjs/config";
-import { EventEmitter2 } from "@nestjs/event-emitter";
+import { InProcessEventBus } from "../../src/platform";
+import type { DomainEvent, PresenceReportedPayload } from "../../src/platform";
 import { MqttService } from "../../src/mqtt/mqtt.service";
 import { TopicService } from "../../src/esp-claw/topic.service";
-import { DEVICE_STATUS_EVENT, DeviceStatusEvent } from "../../src/mqtt/mqtt.events";
 import type { Env } from "../../src/config/env.validation";
 
 /**
@@ -41,7 +41,7 @@ describe("MqttService (integration, real protocol, local test broker)", () => {
   let server: Server;
   let deviceClient: MqttClient;
   let service: MqttService;
-  let events: EventEmitter2;
+  let bus: InProcessEventBus;
 
   let brokerUrl: string;
 
@@ -54,8 +54,8 @@ describe("MqttService (integration, real protocol, local test broker)", () => {
     brokerUrl = url;
 
     const topics = new TopicService(fakeConfig({ MQTT_BASE_TOPIC_PREFIX: baseTopic }));
-    events = new EventEmitter2();
-    service = new MqttService(fakeConfig({ MQTT_URL: url }), topics, events);
+    bus = new InProcessEventBus();
+    service = new MqttService(fakeConfig({ MQTT_URL: url }), topics, bus);
     service.onModuleInit();
     await waitUntil(() => service.isConnected());
 
@@ -83,18 +83,26 @@ describe("MqttService (integration, real protocol, local test broker)", () => {
     await new Promise<void>((resolve) => server.close(() => resolve()));
   });
 
-  it("tracks presence from the real birth-message shape, and emits device.status for DevicesService", async () => {
-    const received: DeviceStatusEvent[] = [];
-    events.once(DEVICE_STATUS_EVENT, (e: DeviceStatusEvent) => received.push(e));
+  it("tracks presence from the real birth-message shape and publishes a device.presence.reported event", async () => {
+    const received: DomainEvent[] = [];
+    const off = bus.subscribe("device.presence.reported", (e) => void received.push(e), { name: "test" });
 
     deviceClient.publish(`${baseTopic}/${deviceId}/status`, JSON.stringify({ online: true }), {
       retain: true,
     });
     await waitUntil(() => service.getPresence(deviceId)?.online === true);
+    await bus.drain();
+    off();
     expect(service.listPresence()).toContainEqual(
       expect.objectContaining({ deviceId, online: true }),
     );
-    expect(received).toContainEqual({ deviceId, baseTopic, online: true });
+    expect(received).toHaveLength(1);
+    expect(received[0]).toMatchObject({
+      event_type: "device.presence.reported",
+      source: "gateway:mqtt",
+      device_id: deviceId,
+      payload: { baseTopic, online: true } satisfies PresenceReportedPayload,
+    });
   });
 
   it("updates presence to offline on the real LWT payload shape", async () => {

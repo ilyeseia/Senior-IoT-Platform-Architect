@@ -35,6 +35,10 @@ export class Command {
   @Column({ type: "integer" })
   timeoutMs!: number;
 
+  /** The API request / event chain that produced this command (migration 0008); null for older rows. */
+  @Column({ name: "correlation_id", type: "varchar", length: 128, nullable: true })
+  correlationId!: string | null;
+
   @CreateDateColumn({ type: "timestamptz" })
   createdAt!: Date;
 

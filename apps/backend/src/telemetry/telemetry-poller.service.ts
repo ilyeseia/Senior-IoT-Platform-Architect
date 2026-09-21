@@ -1,9 +1,11 @@
-import { Injectable, Logger, OnModuleDestroy, OnModuleInit } from "@nestjs/common";
+import { Inject, Injectable, Logger, OnModuleDestroy, OnModuleInit } from "@nestjs/common";
 import { ConfigService } from "@nestjs/config";
 import { CommandsService } from "../commands/commands.service";
 import { DevicesService } from "../devices/devices.service";
 import { TelemetryService, extractSamples } from "./telemetry.service";
 import { TwinService } from "../twin/twin.service";
+import { EVENT_BUS, EventTypes, createEvent } from "../platform";
+import type { EventBus, TelemetryUpdatedPayload } from "../platform";
 import type { Env } from "../config/env.validation";
 
 const DEFAULT_POLL_INTERVAL_MS = 60_000;
@@ -46,6 +48,7 @@ export class TelemetryPollerService implements OnModuleInit, OnModuleDestroy {
     private readonly commands: CommandsService,
     private readonly telemetry: TelemetryService,
     private readonly twin: TwinService,
+    @Inject(EVENT_BUS) private readonly bus: EventBus,
   ) {}
 
   onModuleInit(): void {
@@ -99,6 +102,16 @@ export class TelemetryPollerService implements OnModuleInit, OnModuleDestroy {
       // scalar fields become the twin's `reported` state — one extraction
       // source, two consumers (time-series + latest-value snapshot).
       await this.twin.mergeReported(deviceId, extractSamples(result.result));
+      if (count > 0) {
+        this.bus.publish(
+          createEvent<TelemetryUpdatedPayload>({
+            type: EventTypes.DEVICE_TELEMETRY_UPDATED,
+            source: "module:telemetry",
+            deviceId,
+            payload: { source: capability, samples: count },
+          }),
+        );
+      }
       this.logger.debug(`${deviceId}: ${capability} -> ${count} sample(s)`);
     } catch (err) {
       this.logger.warn(`${deviceId}: ${capability} poll failed: ${(err as Error).message}`);
